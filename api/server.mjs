@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 
 const APP_NAME = "Credit Report Analyzer Pro";
 const VERSION = process.env.npm_package_version ?? "0.1.0";
+const DEPLOYMENT_COMMIT =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.GIT_COMMIT_SHA ||
+  process.env.SOURCE_VERSION ||
+  "local";
 const PORT = Number(process.env.PORT ?? 3000);
 const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? 2_000_000);
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000);
@@ -18,6 +23,15 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "app://.,file://,http://
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+const ROUTES = [
+  "/",
+  "/health",
+  "/api/version",
+  "/api/license/validate",
+  "/api/license/activate",
+  "/api/analyze-report",
+  "/api/generate-letter",
+];
 
 const rateBuckets = new Map();
 
@@ -264,9 +278,9 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && url.pathname === "/") return sendJson(req, res, 200, { name: APP_NAME, version: VERSION, status: "ok", service: "api" });
-    if (req.method === "GET" && url.pathname === "/health") return sendJson(req, res, 200, { status: "ok", uptime: Number(process.uptime().toFixed(3)), timestamp: new Date().toISOString(), env: { keygen: Boolean(KEYGEN_ACCOUNT_ID && KEYGEN_API_TOKEN && KEYGEN_PRODUCT_ID), openai: Boolean(OPENAI_API_KEY), anthropic: Boolean(ANTHROPIC_API_KEY) } });
-    if (req.method === "GET" && url.pathname === "/api/version") return sendJson(req, res, 200, { name: APP_NAME, version: VERSION, node: process.version, platform: process.platform });
+    if (req.method === "GET" && url.pathname === "/") return sendJson(req, res, 200, { name: APP_NAME, version: VERSION, status: "ok", service: "api", deploymentCommit: DEPLOYMENT_COMMIT, routes: ROUTES });
+    if (req.method === "GET" && url.pathname === "/health") return sendJson(req, res, 200, { status: "ok", uptime: Number(process.uptime().toFixed(3)), timestamp: new Date().toISOString(), deploymentCommit: DEPLOYMENT_COMMIT, routes: ROUTES, env: { keygen: Boolean(KEYGEN_ACCOUNT_ID && KEYGEN_API_TOKEN && KEYGEN_PRODUCT_ID), openai: Boolean(OPENAI_API_KEY), anthropic: Boolean(ANTHROPIC_API_KEY) } });
+    if (req.method === "GET" && url.pathname === "/api/version") return sendJson(req, res, 200, { name: APP_NAME, version: VERSION, node: process.version, platform: process.platform, deploymentCommit: DEPLOYMENT_COMMIT });
 
     if (req.method === "POST" && url.pathname === "/api/license/validate") {
       const body = await readJson(req);
