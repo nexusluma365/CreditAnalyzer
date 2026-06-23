@@ -74,6 +74,25 @@ ipcMain.handle("machine:name", async () => `${os.hostname()} (${process.platform
 ipcMain.handle("secureStore:get", async (_event, key: string) => readSecureValue(key));
 ipcMain.handle("secureStore:set", async (_event, key: string, value: string) => writeSecureValue(key, value));
 ipcMain.handle("secureStore:remove", async (_event, key: string) => removeSecureValue(key));
+ipcMain.handle(
+  "api:request",
+  async (_event, input: { url: string; method?: string; body?: unknown }) => {
+    const url = new URL(input.url);
+    if (!["https:", "http:"].includes(url.protocol)) {
+      throw new Error("Unsupported API URL protocol.");
+    }
+
+    const response = await fetch(url, {
+      method: input.method ?? "GET",
+      headers: { "Content-Type": "application/json" },
+      body: input.body === undefined ? undefined : JSON.stringify(input.body),
+    });
+    const text = await response.text();
+    let data: unknown = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+    return { ok: response.ok, status: response.status, data };
+  }
+);
 
 function getStorageDir() {
   const dir = path.join(app.getPath("userData"), "secure-store");

@@ -5,6 +5,11 @@ interface ElectronAPI {
   extractPdfText: (filePath: string) => Promise<string>;
   getMachineFingerprint: () => Promise<string>;
   getMachineName: () => Promise<string>;
+  apiRequest: (input: {
+    url: string;
+    method?: string;
+    body?: unknown;
+  }) => Promise<{ ok: boolean; status: number; data: unknown }>;
   secureStore: {
     get: (key: string) => Promise<string | null>;
     set: (key: string, value: string) => Promise<boolean>;

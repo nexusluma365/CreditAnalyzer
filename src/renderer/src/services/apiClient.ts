@@ -22,6 +22,16 @@ export function setApiBaseUrl(url: string) {
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const apiBaseUrl = getApiBaseUrl();
+  if (window.electronAPI?.apiRequest) {
+    const result = await window.electronAPI.apiRequest({
+      url: `${apiBaseUrl}${path}`,
+      method: "POST",
+      body,
+    });
+    if (!result.ok) throw apiError(result.data, result.status);
+    return result.data as T;
+  }
+
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,13 +46,22 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || `API request failed (${response.status})`);
+    throw apiError(data, response.status);
   }
   return data as T;
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
   const apiBaseUrl = getApiBaseUrl();
+  if (window.electronAPI?.apiRequest) {
+    const result = await window.electronAPI.apiRequest({
+      url: `${apiBaseUrl}${path}`,
+      method: "GET",
+    });
+    if (!result.ok) throw apiError(result.data, result.status);
+    return result.data as T;
+  }
+
   const response = await fetch(`${apiBaseUrl}${path}`).catch((error) => {
     throw new Error(
       `Could not reach the licensing server at ${apiBaseUrl}. ${
@@ -52,7 +71,12 @@ export async function apiGet<T>(path: string): Promise<T> {
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || `API request failed (${response.status})`);
+    throw apiError(data, response.status);
   }
   return data as T;
+}
+
+function apiError(data: unknown, status: number) {
+  const payload = data as { message?: string; error?: string } | null;
+  return new Error(payload?.message || payload?.error || `API request failed (${status})`);
 }
