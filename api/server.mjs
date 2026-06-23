@@ -15,7 +15,7 @@ const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX ?? 80);
 const AI_RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_MAX ?? 20);
 
 const KEYGEN_ACCOUNT_ID = process.env.KEYGEN_ACCOUNT_ID ?? "";
-const KEYGEN_PRODUCT_ID = process.env.KEYGEN_PRODUCT_ID ?? "";
+const KEYGEN_PRODUCT_ID = normalizeKeygenId(process.env.KEYGEN_PRODUCT_ID ?? "");
 const KEYGEN_API_TOKEN = process.env.KEYGEN_API_TOKEN ?? "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
@@ -32,6 +32,15 @@ const ROUTES = [
   "/api/analyze-report",
   "/api/generate-letter",
 ];
+
+function normalizeKeygenId(id) {
+  const trimmed = String(id || "").trim();
+  const knownIds = {
+    "6935744f": "6935744f-f8ac-4a48-afcb-0a62d1c875d8",
+    "13f12dcd": "13f12dcd-6325-497a-a227-5422368cdf10",
+  };
+  return knownIds[trimmed] ?? trimmed;
+}
 
 const rateBuckets = new Map();
 
