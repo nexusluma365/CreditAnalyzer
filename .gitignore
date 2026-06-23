@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+.claude/
+src/renderer/src/**/*.js
+src/renderer/src/**/*.js.map
+*.tsbuildinfo
+*.log
+.DS_Store
+.env
+.env.local

@@ -1,0 +1,76 @@
+{
+  "name": "credit-report-analyzer-pro",
+  "productName": "Credit Report Analyzer Pro",
+  "version": "0.1.0",
+  "description": "AI-assisted credit report analysis and dispute letter drafting — research-informed dispute strategy tool",
+  "main": "dist-electron/main.js",
+  "author": "Credit Report Analyzer Pro",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n VITE,ELECTRON -c blue,green \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:api": "node api/server.mjs",
+    "dev:electron": "npm run build:electron && cross-env ELECTRON_RUN_AS_NODE= NODE_ENV=development electron dist-electron/main.js",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p electron/tsconfig.main.json && tsc -p electron/tsconfig.preload.json && node scripts/rename-preload.mjs",
+    "build": "npm run build:renderer && npm run build:electron",
+    "dist": "npm run build && electron-builder --mac --win",
+    "start:api": "node api/server.mjs",
+    "start": "cross-env ELECTRON_RUN_AS_NODE= electron dist-electron/main.js",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win",
+    "package:all": "npm run build && electron-builder --mac --win",
+    "typecheck": "tsc --noEmit -p src/renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.main.json && tsc --noEmit -p electron/tsconfig.preload.json"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.61.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^8.1.0"
+  },
+  "build": {
+    "appId": "com.creditreportanalyzerpro.app",
+    "productName": "Credit Report Analyzer Pro",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.finance",
+      "artifactName": "CreditAnalyzer.${ext}",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "artifactName": "CreditAnalyzer Setup.${ext}",
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
