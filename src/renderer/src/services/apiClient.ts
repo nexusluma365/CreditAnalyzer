@@ -1,4 +1,5 @@
-const DEFAULT_API_BASE_URL = "http://localhost:3000";
+const DEFAULT_API_BASE_URL = "https://creditanalyzer-production.up.railway.app";
+const LOCAL_API_BASE_URL = "http://localhost:3000";
 const API_BASE_STORAGE_KEY = "cra-pro:api-base-url";
 
 export function getApiBaseUrl(): string {
@@ -6,7 +7,8 @@ export function getApiBaseUrl(): string {
   if (viteUrl?.trim()) return viteUrl.trim().replace(/\/$/, "");
   if (typeof localStorage !== "undefined") {
     const saved = localStorage.getItem(API_BASE_STORAGE_KEY);
-    if (saved?.trim()) return saved.trim().replace(/\/$/, "");
+    const normalized = saved?.trim().replace(/\/$/, "");
+    if (normalized && normalized !== LOCAL_API_BASE_URL) return normalized;
   }
   return DEFAULT_API_BASE_URL;
 }
@@ -19,10 +21,17 @@ export function setApiBaseUrl(url: string) {
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  }).catch((error) => {
+    throw new Error(
+      `Could not reach the licensing server at ${apiBaseUrl}. ${
+        error instanceof Error ? error.message : "Check your connection and try again."
+      }`
+    );
   });
 
   const data = await response.json().catch(() => null);
@@ -33,7 +42,14 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`);
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}${path}`).catch((error) => {
+    throw new Error(
+      `Could not reach the licensing server at ${apiBaseUrl}. ${
+        error instanceof Error ? error.message : "Check your connection and try again."
+      }`
+    );
+  });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(data?.message || data?.error || `API request failed (${response.status})`);

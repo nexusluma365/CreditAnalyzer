@@ -150,7 +150,7 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
           )}
           {state === "offline" && (
             <StatusMessage tone="error" icon={<WifiOffIcon size={15} />}>
-              Couldn&rsquo;t reach the licensing server. Check your connection and try again.
+              {errorMessage ?? "Couldn't reach the licensing server. Check your connection and try again."}
             </StatusMessage>
           )}
 
