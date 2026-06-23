@@ -303,10 +303,14 @@ const server = createServer(async (req, res) => {
       const licenseKey = String(body.licenseKey ?? "").trim();
       const fingerprint = String(body.fingerprint ?? "").trim();
       if (!licenseKey) return sendJson(req, res, 400, { valid: false, message: "Missing licenseKey" });
-      const result = await validateLicenseWithKeygen({ licenseKey, fingerprint });
+      const result = await validateLicenseWithKeygen({ licenseKey, fingerprint: "" });
       let machine = null;
-      if (result.valid && fingerprint && result.licenseId) machine = await createMachineForLicense({ licenseId: result.licenseId, fingerprint, name: body.machineName });
-      return sendJson(req, res, 200, { ...result, activated: result.valid, machine });
+      let finalResult = result;
+      if (result.valid && fingerprint && result.licenseId) {
+        machine = await createMachineForLicense({ licenseId: result.licenseId, fingerprint, name: body.machineName });
+        finalResult = await validateLicenseWithKeygen({ licenseKey, fingerprint });
+      }
+      return sendJson(req, res, 200, { ...finalResult, activated: finalResult.valid, machine });
     }
 
     if (req.method === "POST" && url.pathname === "/api/analyze-report") {
