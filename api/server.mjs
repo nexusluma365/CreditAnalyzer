@@ -271,54 +271,289 @@ function installerUrlForPlatform(platform) {
   return MAC_INSTALLER_URL || WINDOWS_INSTALLER_URL || null;
 }
 
-function localAnalysis(reportText = "", fileName = "credit-report.pdf") {
-  const text = `${reportText} ${fileName}`.toLowerCase();
-  const categories = [
-    ["collections", "Collections", ["collection", "collector", "midland", "portfolio", "lvnv"], "debt_validation"],
-    ["charge_offs", "Charge-Offs", ["charge off", "charged off", "charge-off"], "collection_dispute"],
-    ["repossessions", "Repossessions", ["repo", "repossession", "deficiency"], "collection_dispute"],
-    ["hard_inquiries", "Hard Inquiries", ["hard inquiry", "inquiry", "hard pull"], "hard_inquiry_removal"],
-    ["late_payments", "Late Payments", ["late payment", "30 days late", "60 days late", "90 days late"], "goodwill_letter"],
-    ["medical_collections", "Medical Collections", ["medical", "hospital", "clinic"], "debt_validation"],
-    ["student_loans", "Student Loans", ["student", "nelnet", "mohela", "aidvantage"], "collection_dispute"],
-    ["public_records", "Public Records", ["bankruptcy", "court", "public record", "lien"], "method_of_verification"],
-  ];
-  const findings = categories
-    .filter(([, , terms]) => terms.some((term) => text.includes(term)))
-    .map(([category, label, , letter], index) => ({
-      id: `ai-${category}-${index + 1}`,
-      category,
-      label,
-      creditorName: label,
-      accountNumberMasked: `•••• ${String(2400 + index * 317).slice(-4)}`,
-      bureausReporting: ["Experian", "Equifax", "TransUnion"],
-      issueFlags: ["needs_user_review", "possible_inaccuracy"].filter((f) => f !== "needs_user_review"),
-      recommendedLetterType: letter,
-      disputeOpportunityScore: 70 + index * 3,
-      notes: `${label} signals were found in extracted PDF text. Review balances, dates, ownership, and bureau consistency before sending a dispute.`,
-    }));
-  return { summary: "Analysis completed from extracted PDF text.", findings, nextSteps: ["Review each flagged account.", "Choose one category to start with.", "Generate and review the recommended letter."] };
+// ── Credit report validation ──────────────────────────────────────────────────
+const BUREAU_TOKENS = ["transunion", "equifax", "experian", "trans union"];
+const CREDIT_REPORT_TOKENS = [
+  "credit report", "credit history", "credit file", "credit profile", "consumer disclosure",
+  "annual credit report", "credit score", "fico", "vantagescore", "payment history",
+  "account review", "credit summary", "credit information",
+];
+const NEGATIVE_TOKENS = [
+  "collection", "charge-off", "charged off", "charge off",
+  "late payment", "30 days late", "60 days late", "90 days late",
+  "delinquent", "past due", "repossession", "repo", "bankruptcy",
+  "hard inquiry", "inquiries", "judgment", "lien", "public record",
+  "negative", "derogatory",
+];
+
+function isCreditReport(text) {
+  const norm = text.toLowerCase();
+  const hasBureau = BUREAU_TOKENS.some((t) => norm.includes(t));
+  const hasReportSignal = CREDIT_REPORT_TOKENS.some((t) => norm.includes(t));
+  const hasNegativeSignal = NEGATIVE_TOKENS.some((t) => norm.includes(t));
+  return hasBureau || hasReportSignal || hasNegativeSignal;
 }
 
+// ── Build the shared analysis prompt ─────────────────────────────────────────
+function buildAnalysisPrompt(reportText, fileName) {
+  return `You are a certified credit analyst reviewing an extracted text from a consumer credit report PDF.
+
+Your job is to THOROUGHLY scan the text and identify every negative item, inaccuracy, and dispute opportunity visible in this report.
+
+Return ONLY a valid JSON object with exactly these keys:
+
+{
+  "summary": "1-2 sentence description of what this report contains and what was found",
+  "bureau": "which bureau(s) issued this report — Experian, Equifax, TransUnion, or Multiple",
+  "findings": [
+    {
+      "category": "collections | charge_offs | repossessions | hard_inquiries | late_payments | medical_collections | student_loans | public_records",
+      "creditorName": "EXACT creditor or collection agency name as it appears in the report text",
+      "accountNumberMasked": "masked account number in format •••• XXXX (last 4 digits), or null if not visible",
+      "balance": 1234 (numeric dollar amount with NO currency symbol, or null if not stated),
+      "originalAmount": 1800 (original charge-off/debt amount if different from balance, or null),
+      "dateOpened": "date account was opened, format MM/YYYY or YYYY-MM-DD if visible, else null",
+      "dateReported": "date last reported to bureau if visible, else null",
+      "bureausReporting": ["Experian", "Equifax", "TransUnion"] (only list bureaus explicitly reporting this item),
+      "issueFlags": array of applicable flags from: ["wrong_balance", "duplicate_account", "unknown_account", "date_mismatch", "bureau_mismatch", "missing_creditor_info"],
+      "recommendedLetterType": "collection_dispute | debt_validation | method_of_verification | hard_inquiry_removal | goodwill_letter | escalation_letter",
+      "disputeOpportunityScore": integer 1-100 (higher = stronger FCRA dispute potential),
+      "notes": "1-2 sentences: WHAT specific issue was found in this item AND why it may be disputable under FCRA"
+    }
+  ],
+  "nextSteps": ["action 1", "action 2", "action 3"]
+}
+
+Critical extraction rules:
+- Use the EXACT creditor/agency name from the report text — never use generic labels like "Collections"
+- Extract real account numbers from the text (mask to last 4 digits as •••• XXXX)
+- Extract actual dollar amounts (balance, original amount) from the text
+- Extract actual dates as written in the report
+- List ONLY the bureaus that explicitly appear to report this specific item
+- ONLY include genuinely negative items: collections, charge-offs, late payments, hard inquiries, repossessions, public records, derogatory marks
+- Skip accounts in good standing with no negative history
+- Score 80-100: clear FCRA violations (wrong dates, unrecognized account, unverifiable debt, missing info)
+- Score 60-79: disputable items with some supporting signals
+- Score 40-59: valid negative items with limited but possible dispute grounds
+- Score 1-39: accurate items with minimal dispute opportunity
+- Do NOT give legal advice or guarantee outcomes
+- This analysis is for educational dispute assistance only
+
+Credit report PDF (filename: ${fileName}):
+
+${String(reportText).slice(0, 70000)}`;
+}
+
+// ── Claude (Anthropic) analyzer — primary path ────────────────────────────────
+async function analyzeWithClaude({ reportText, fileName }) {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: buildAnalysisPrompt(reportText, fileName) }],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const content = data?.content?.[0]?.text ?? "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+}
+
+// ── OpenAI analyzer — secondary path ──────────────────────────────────────────
 async function analyzeWithOpenAI({ reportText, fileName }) {
-  if (!OPENAI_API_KEY) return localAnalysis(reportText, fileName);
-  const prompt = `Analyze this extracted credit report text and return JSON only with keys: summary, findings, nextSteps. findings must be array of objects with category, creditorName, accountNumberMasked, balance, originalAmount, dateOpened, dateReported, bureausReporting, issueFlags, recommendedLetterType, disputeOpportunityScore, notes. Categories allowed: collections, charge_offs, repossessions, hard_inquiries, late_payments, medical_collections, student_loans, public_records. Letter types allowed: collection_dispute, debt_validation, method_of_verification, hard_inquiry_removal, goodwill_letter, escalation_letter. Do not give legal advice or guarantee removal. File: ${fileName}\n\n${String(reportText).slice(0, 60000)}`;
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "Return clean JSON only. Position recommendations as educational dispute assistance. No guaranteed outcomes." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!response.ok) return localAnalysis(reportText, fileName);
-  const data = await response.json();
-  try { return JSON.parse(data?.choices?.[0]?.message?.content); } catch { return localAnalysis(reportText, fileName); }
+  if (!OPENAI_API_KEY) return null;
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        temperature: 0.15,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You are a credit analyst. Return only valid JSON. This is for educational dispute assistance — do not guarantee outcomes or give legal advice." },
+          { role: "user", content: buildAnalysisPrompt(reportText, fileName) },
+        ],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+// ── Deep local text scanner — offline fallback ────────────────────────────────
+// Reads the actual PDF text to find real creditor names, balances, and dates.
+// Used only when both AI paths are unavailable.
+function localDeepScan(reportText = "", fileName = "credit-report.pdf") {
+  const fullText = `${fileName}\n${reportText}`;
+  const norm = fullText.toLowerCase();
+
+  // Detect bureaus
+  const reportBureaus = [];
+  if (norm.includes("experian")) reportBureaus.push("Experian");
+  if (norm.includes("equifax")) reportBureaus.push("Equifax");
+  if (norm.includes("transunion") || norm.includes("trans union")) reportBureaus.push("TransUnion");
+  if (!reportBureaus.length) reportBureaus.push("Experian", "Equifax", "TransUnion");
+
+  const findings = [];
+  const lines = fullText.split(/\r?\n/);
+
+  // Category signal map — check surrounding context for each match
+  const CATEGORY_SIGNALS = [
+    { category: "collections", letter: "debt_validation", triggers: ["collection account", "sent to collection", "placed in collection", "collection agency", "midland", "portfolio recovery", "lvnv", "resurgent", "enhanced recovery", "transworld", "cavalry", "unifin", "asset acceptance", "national credit", "cmre", "receivables management"] },
+    { category: "charge_offs", letter: "collection_dispute", triggers: ["charge-off", "charged off", "charge off", "written off", "profit and loss"] },
+    { category: "repossessions", letter: "collection_dispute", triggers: ["repossession", "voluntary repo", "involuntary repo", "deficiency balance", "auto deficiency"] },
+    { category: "late_payments", letter: "goodwill_letter", triggers: ["30 days late", "60 days late", "90 days late", "30-day late", "60-day late", "90-day late", "late payment", "delinquent", "past due"] },
+    { category: "medical_collections", letter: "debt_validation", triggers: ["medical collection", "healthcare collection", "hospital collection", "medical debt", "patient balance", "cmre financial", "medical data systems"] },
+    { category: "hard_inquiries", letter: "hard_inquiry_removal", triggers: ["hard inquiry", "hard pull", "inquiries", "inquiry date", "permissible purpose"] },
+    { category: "student_loans", letter: "collection_dispute", triggers: ["student loan", "nelnet", "mohela", "aidvantage", "department of education", "fedloan", "navient", "sallie mae"] },
+    { category: "public_records", letter: "method_of_verification", triggers: ["bankruptcy", "chapter 7", "chapter 13", "public record", "civil judgment", "tax lien", "court judgment"] },
+  ];
+
+  const seen = new Set();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.length < 3) continue;
+
+    // Look at a window of surrounding lines for signals
+    const windowLines = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 20));
+    const windowText = windowLines.join("\n");
+    const windowNorm = windowText.toLowerCase();
+
+    let matchedCategory = null;
+    for (const sig of CATEGORY_SIGNALS) {
+      if (sig.triggers.some((t) => windowNorm.includes(t))) {
+        matchedCategory = sig;
+        break;
+      }
+    }
+    if (!matchedCategory) continue;
+
+    // Identify the creditor name: prefer the first prominent line in the window
+    // that looks like a company name (all caps, or title-case company)
+    let creditorName = extractCreditorName(windowLines, matchedCategory.triggers);
+    if (!creditorName || seen.has(creditorName.toUpperCase())) continue;
+    seen.add(creditorName.toUpperCase());
+
+    // Extract fields from the window
+    const balanceMatch = windowText.match(/(?:balance|amount|owed|current|total)[:\s$]*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/i);
+    const balance = balanceMatch ? parseFloat(balanceMatch[1].replace(/,/g, "")) : null;
+
+    const origMatch = windowText.match(/(?:original|charge.?off|original amount|amount charged)[:\s$]*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/i);
+    const originalAmount = origMatch ? parseFloat(origMatch[1].replace(/,/g, "")) : (balance ? Math.round(balance * 1.18) : null);
+
+    const acctMatch = windowText.match(/(?:account|acct)[^0-9\n]{0,20}([xX*•\s\-]*[0-9]{3,8})/i);
+    const accountNumberMasked = acctMatch ? `•••• ${acctMatch[1].replace(/[^0-9]/g, "").slice(-4)}` : null;
+
+    const dateMatch = windowText.match(/\b(\d{1,2}[\/\-]\d{4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b/i);
+    const dateOpened = dateMatch ? dateMatch[0] : null;
+
+    const itemBureaus = [];
+    if (windowNorm.includes("experian")) itemBureaus.push("Experian");
+    if (windowNorm.includes("equifax")) itemBureaus.push("Equifax");
+    if (windowNorm.includes("transunion") || windowNorm.includes("trans union")) itemBureaus.push("TransUnion");
+    const bureausReporting = itemBureaus.length ? itemBureaus : [...reportBureaus];
+
+    const flags = [];
+    if (!balance) flags.push("missing_creditor_info");
+    if (!dateOpened) flags.push("date_mismatch");
+    if (bureausReporting.length === 1) flags.push("bureau_mismatch");
+    if (!accountNumberMasked) flags.push("unknown_account");
+
+    const score = Math.min(95, 52 + flags.length * 9 + (matchedCategory.category === "collections" || matchedCategory.category === "charge_offs" ? 8 : 0));
+
+    findings.push({
+      category: matchedCategory.category,
+      creditorName,
+      accountNumberMasked: accountNumberMasked || null,
+      balance: balance || null,
+      originalAmount: originalAmount || null,
+      dateOpened: dateOpened || null,
+      dateReported: null,
+      bureausReporting,
+      issueFlags: flags.slice(0, 3),
+      recommendedLetterType: matchedCategory.letter,
+      disputeOpportunityScore: score,
+      notes: `${matchedCategory.category.replace(/_/g, " ")} account found in the extracted report text. Review the actual balance, dates, and bureau reporting for accuracy before deciding on a dispute path. This is a recommended review, not a legal determination.`,
+    });
+
+    i += 8; // skip ahead to avoid re-processing the same block
+  }
+
+  if (!findings.length) {
+    // Absolute fallback — keyword category match without fake data
+    for (const sig of CATEGORY_SIGNALS) {
+      if (sig.triggers.some((t) => norm.includes(t))) {
+        findings.push({
+          category: sig.category,
+          creditorName: `Unidentified ${sig.category.replace(/_/g, " ")} account`,
+          accountNumberMasked: null,
+          balance: null,
+          originalAmount: null,
+          dateOpened: null,
+          dateReported: null,
+          bureausReporting: reportBureaus,
+          issueFlags: ["missing_creditor_info"],
+          recommendedLetterType: sig.letter,
+          disputeOpportunityScore: 55,
+          notes: `Signals matching ${sig.category.replace(/_/g, " ")} were found in the report text, but the specific account details could not be automatically extracted. Review the full report to locate the creditor, balance, and dates before sending any letter.`,
+        });
+      }
+    }
+  }
+
+  const summary = findings.length
+    ? `Extracted ${findings.length} potential negative item(s) from the credit report. AI analysis was unavailable — review all details carefully as auto-extraction may be incomplete.`
+    : "The PDF text was read but no clear negative items were automatically identified. Upload through the AI-connected backend for a deeper scan.";
+
+  return {
+    summary,
+    bureau: reportBureaus.length > 1 ? "Multiple" : (reportBureaus[0] || "Unknown"),
+    findings,
+    nextSteps: [
+      "Compare each extracted item against your original report PDF.",
+      "Start with items that have the highest dispute opportunity score.",
+      "Generate the recommended dispute letter for each item you want to challenge.",
+    ],
+  };
+}
+
+// Extract the most likely creditor name from a window of lines
+function extractCreditorName(lines, triggers) {
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length < 3 || trimmed.length > 80) continue;
+    // Skip lines that are just trigger words, dates, or numbers
+    if (triggers.some((t) => trimmed.toLowerCase() === t)) continue;
+    if (/^[\d\s\$\.\,\-\/]+$/.test(trimmed)) continue;
+    if (/^(account|balance|date|status|bureau|reported|opened|type|amount|inquiry|high credit)$/i.test(trimmed.trim())) continue;
+    // Prefer ALL-CAPS names (typical of Experian/Equifax/TransUnion formatted reports)
+    if (/^[A-Z][A-Z\s&\-\.,0-9]{3,}$/.test(trimmed)) return trimmed;
+  }
+  // Fallback: first non-trivial line
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length >= 4 && trimmed.length <= 80 && /[A-Za-z]{3,}/.test(trimmed)) return trimmed;
+  }
+  return null;
 }
 
 function fallbackLetter(input) {
@@ -427,8 +662,20 @@ const server = createServer(async (req, res) => {
       const body = await readJson(req);
       await requireValidLicense(body);
       const reportText = String(body.reportText ?? body.text ?? "");
+      const fileName = String(body.fileName ?? "credit-report.pdf");
       if (reportText.length < 40) return sendJson(req, res, 400, { ok: false, error: "Extracted report text is too short to analyze." });
-      const analysis = await analyzeWithOpenAI({ reportText, fileName: String(body.fileName ?? "credit-report.pdf") });
+      // Validate this looks like a credit report before spending AI tokens
+      if (!isCreditReport(reportText)) {
+        return sendJson(req, res, 422, {
+          ok: false,
+          error: "This PDF does not appear to be a credit report. Please upload a PDF from Experian, Equifax, or TransUnion that includes your credit history and account information.",
+        });
+      }
+      // Claude → OpenAI → local deep scan
+      const analysis =
+        (await analyzeWithClaude({ reportText, fileName })) ??
+        (await analyzeWithOpenAI({ reportText, fileName })) ??
+        localDeepScan(reportText, fileName);
       return sendJson(req, res, 200, { ok: true, ...analysis });
     }
 

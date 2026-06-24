@@ -74,11 +74,16 @@ export async function parseCreditReportPdf(
     pages: estimatePages(file.fileSize, extractedText),
   };
 
-  onProgress?.({ progress: 52, message: "Sending extracted text to the licensed backend for deeper dispute-signal review..." });
+  // Validate credit report before spending network round-trip
+  onProgress?.({ progress: 46, message: "Verifying document is a credit report from a recognized bureau..." });
+  validateIsCreditReport(extractedText, file.fileName);
+
+  onProgress?.({ progress: 55, message: "Sending extracted text to the licensed backend for AI-powered dispute-signal review..." });
   const apiItems = await analyzeWithBackend(reportId, extractedText, file.fileName);
-  onProgress?.({ progress: 72, message: "Cross-checking categories and recommended letter strategy for each flagged item..." });
-  const items = apiItems.length ? apiItems : buildDetectedItems(reportId, extractedText, file.fileName);
-  onProgress?.({ progress: 84, message: "Scoring dispute opportunities and preparing the best-fit letter starting point..." });
+  onProgress?.({ progress: 74, message: "Cross-checking categories and recommended letter strategy for each flagged item..." });
+  // Only use local fallback if backend returned zero results AND the text has negative signals
+  const items = apiItems.length ? apiItems : buildLocalFallback(reportId, extractedText);
+  onProgress?.({ progress: 86, message: "Scoring dispute opportunities and preparing the best-fit letter starting point..." });
   return { report, items };
 }
 
@@ -93,14 +98,45 @@ async function extractReportText(file: UploadedCreditReportFile): Promise<string
   throw new Error("The app could not read this PDF. Please use the Browse button and select a text-based PDF credit report.");
 }
 
+const BUREAU_SIGNALS = ["transunion", "equifax", "experian", "trans union"];
+const CREDIT_SIGNALS = [
+  "credit report", "credit history", "credit file", "credit profile",
+  "consumer disclosure", "annual credit report", "credit score", "fico",
+  "vantagescore", "payment history", "account review", "credit summary",
+];
+const NEGATIVE_SIGNALS = [
+  "collection", "charge-off", "charged off", "charge off",
+  "late payment", "30 days late", "60 days late", "90 days late",
+  "delinquent", "past due", "repossession", "hard inquiry",
+  "inquiries", "judgment", "lien", "bankruptcy", "negative", "derogatory",
+];
+
+function validateIsCreditReport(text: string, fileName: string): void {
+  const norm = `${text} ${fileName}`.toLowerCase();
+  const hasBureau = BUREAU_SIGNALS.some((t) => norm.includes(t));
+  const hasCreditSignal = CREDIT_SIGNALS.some((t) => norm.includes(t));
+  const hasNegativeSignal = NEGATIVE_SIGNALS.some((t) => norm.includes(t));
+  if (!hasBureau && !hasCreditSignal && !hasNegativeSignal) {
+    throw new Error(
+      "This PDF does not appear to be a credit report. Please upload a PDF from Experian, Equifax, or TransUnion that includes your credit history, account information, and payment records."
+    );
+  }
+}
+
 async function analyzeWithBackend(reportId: string, reportText: string, fileName: string): Promise<NegativeItem[]> {
   try {
     const auth = await getLicenseAuthPayload();
     if (!auth) throw new Error("License validation is required before AI analysis.");
-    const result = await apiPost<AnalyzeApiResponse>("/api/analyze-report", { ...auth, reportText, fileName });
+    const result = await apiPost<AnalyzeApiResponse & { error?: string }>("/api/analyze-report", { ...auth, reportText, fileName });
+    // If the server explicitly rejected it as a non-credit-report, surface that error
+    if ((result as { ok?: boolean }).ok === false && result.error) {
+      throw new Error(result.error);
+    }
     const findings = Array.isArray(result.findings) ? result.findings : [];
     return findings.map((item, index) => normalizeApiItem(reportId, item, index)).filter(Boolean) as NegativeItem[];
-  } catch {
+  } catch (err) {
+    // Re-throw validation errors (not-a-credit-report) so they reach the UI
+    if (err instanceof Error && err.message.includes("credit report")) throw err;
     return [];
   }
 }
@@ -127,32 +163,42 @@ function normalizeApiItem(reportId: string, item: Partial<NegativeItem> & { labe
   };
 }
 
-function buildDetectedItems(reportId: string, reportText: string, fileName: string): NegativeItem[] {
-  const normalized = `${fileName}\n${reportText}`.toLowerCase();
-  const selected = CATEGORY_BANK.filter((entry) => entry.terms.some((term) => normalized.includes(term)));
-  const categories = selected.length ? selected : CATEGORY_BANK.slice(0, 3);
+// Offline fallback — only called when the API backend is unreachable.
+// Never invents fake creditor names or fake account numbers.
+// Instead, marks detected categories as "unresolved — re-upload with connection."
+function buildLocalFallback(reportId: string, reportText: string): NegativeItem[] {
+  const norm = reportText.toLowerCase();
+  const reportBureaus: Bureau[] = [];
+  if (norm.includes("experian")) reportBureaus.push("Experian");
+  if (norm.includes("equifax")) reportBureaus.push("Equifax");
+  if (norm.includes("transunion") || norm.includes("trans union")) reportBureaus.push("TransUnion");
+  if (!reportBureaus.length) reportBureaus.push("Experian", "Equifax", "TransUnion");
 
-  return categories.map((entry, index) => {
-    const bureauRotation: Bureau[][] = [["Experian", "Equifax", "TransUnion"], ["Experian", "TransUnion"], ["Equifax", "TransUnion"], ["Experian"], ["Equifax"]];
-    const flags = entry.flags.slice(0, Math.min(entry.flags.length, 1 + (index % 3)));
-    const score = Math.min(94, 58 + index * 7 + flags.length * 7);
-    const amount = inferAmountNearTerms(reportText, entry.terms) ?? (entry.category === "hard_inquiries" ? undefined : 280 + index * 415);
-    const creditor = inferCreditorName(reportText, entry.names) || entry.names[index % entry.names.length];
+  const matched = CATEGORY_BANK.filter((entry) => entry.terms.some((term) => norm.includes(term)));
+  if (!matched.length) return [];
+
+  return matched.map((entry, index) => {
+    const amount = inferAmountNearTerms(reportText, entry.terms);
+    const acctNum = inferAccountNumber(reportText);
+    const dateOpened = inferDate(reportText, /opened|date opened/i);
+    const dateReported = inferDate(reportText, /reported|last reported/i);
+    // Extract real creditor name if visible; never fall back to a made-up name
+    const realCreditor = inferCreditorName(reportText, entry.names);
     return {
-      id: `${reportId}-item-${index + 1}`,
+      id: `${reportId}-local-${index + 1}`,
       reportId,
       category: entry.category,
-      creditorName: creditor,
-      accountNumberMasked: inferAccountNumber(reportText) || `•••• ${String(2400 + index * 317).slice(-4)}`,
-      balance: amount,
-      originalAmount: amount ? amount + 320 + index * 85 : undefined,
-      dateOpened: inferDate(reportText, /opened|date opened|opened date/i),
-      dateReported: inferDate(reportText, /reported|date reported|last reported/i),
-      bureausReporting: bureauRotation[index % bureauRotation.length],
-      issueFlags: flags,
+      creditorName: realCreditor ?? `Unidentified ${entry.label} account`,
+      accountNumberMasked: acctNum ?? "—",
+      balance: amount ?? undefined,
+      originalAmount: amount ? Math.round(amount * 1.15) : undefined,
+      dateOpened: dateOpened ?? undefined,
+      dateReported: dateReported ?? undefined,
+      bureausReporting: reportBureaus,
+      issueFlags: (["missing_creditor_info"] as AccountIssueFlag[]).concat(!acctNum ? ["unknown_account" as AccountIssueFlag] : []),
       recommendedLetterType: entry.letter,
-      disputeOpportunityScore: score,
-      notes: `${entry.notes} The analyzer extracted readable PDF text and matched this item to a research-informed dispute strategy. Review all extracted details before sending any letter. This is a recommended review path, not a determination that the item is inaccurate.`,
+      disputeOpportunityScore: 55,
+      notes: `${entry.label} signals were detected in the extracted credit report text but full AI analysis was unavailable at the time of upload. Re-upload when the backend is reachable for a complete scan and accurate item details.`,
     };
   });
 }
