@@ -2,7 +2,7 @@
  * letterGeneratorService.ts
  * --------------------------
  * Orchestrates dispute letter creation and local exports. Drafting itself is
- * delegated to openaiService (placeholder today, real OpenAI call later).
+ * delegated to openaiService, with a local educational template fallback.
  * The MVP now creates real downloadable files from the renderer so users can
  * save drafts immediately while PDF/DOCX-grade formatting can be improved in
  * the Electron main process later.

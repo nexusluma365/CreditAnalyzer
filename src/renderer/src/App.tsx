@@ -16,7 +16,7 @@ import { BootScreen } from "@/screens/BootScreen";
 import { OnboardingScreen } from "@/screens/OnboardingScreen";
 import { LicenseLockoutScreen } from "@/screens/LicenseLockoutScreen";
 import { UsbLockScreen } from "@/screens/UsbLockScreen";
-import { hasCompletedOnboarding, hasCompletedOnboardingAsync, saveProfile, markOnboardingComplete } from "@/services/userProfileService";
+import { clearProfile, hasCompletedOnboarding, hasCompletedOnboardingAsync, saveProfile, markOnboardingComplete } from "@/services/userProfileService";
 import { deriveLicenseState } from "@/services/licenseStateService";
 import { scanUsbLicense, validateUsbLicense } from "@/services/usbLicenseService";
 import { playSound } from "@/services/soundService";
@@ -81,10 +81,13 @@ function AppGate() {
       // Auto-save license holder profile from Keygen so the app shows real name/email
       if (result.userName || result.userEmail) {
         const saved = await saveProfile({
-          fullName: result.userName ?? "License Holder",
+          fullName: result.userName ?? "Default User",
           email: result.userEmail ?? "",
         });
         setProfile(saved);
+      } else {
+        await clearProfile();
+        setProfile(null);
       }
       await markOnboardingComplete();
     } else {
@@ -158,10 +161,13 @@ function AppGate() {
         setUsbReason(undefined);
         if (result.userName || result.userEmail) {
           const saved = await saveProfile({
-            fullName: result.userName ?? "License Holder",
+            fullName: result.userName ?? "Default User",
             email: result.userEmail ?? "",
           });
           setProfile(saved);
+        } else {
+          await clearProfile();
+          setProfile(null);
         }
         await markOnboardingComplete();
       } else {

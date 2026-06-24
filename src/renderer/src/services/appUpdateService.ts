@@ -2,7 +2,7 @@ import { apiGet } from "./apiClient";
 
 const UPDATE_POLL_MS = 60 * 1000;
 const LAST_BACKEND_COMMIT_KEY = "cra-pro:last-backend-commit";
-const INSTALLING_VERSION_KEY = "cra-pro:installing-version";
+let installingVersion: string | null = null;
 
 interface AppUpdateManifest {
   appVersion: string;
@@ -39,14 +39,13 @@ async function checkForAppUpdates() {
     if (manifest.updateAvailable) {
       window.dispatchEvent(new CustomEvent("cra-pro:update-available", { detail: manifest }));
       if (manifest.downloadUrl && window.electronAPI?.updateAndInstall) {
-        const installingVersion = localStorage.getItem(INSTALLING_VERSION_KEY);
         if (installingVersion !== manifest.latestVersion) {
-          localStorage.setItem(INSTALLING_VERSION_KEY, manifest.latestVersion);
+          installingVersion = manifest.latestVersion;
           const result = await window.electronAPI.updateAndInstall({
             downloadUrl: manifest.downloadUrl,
             latestVersion: manifest.latestVersion,
           });
-          if (!result.ok) localStorage.removeItem(INSTALLING_VERSION_KEY);
+          if (!result.ok) installingVersion = null;
           return;
         }
       }
@@ -62,7 +61,7 @@ async function checkForAppUpdates() {
       localStorage.setItem(LAST_BACKEND_COMMIT_KEY, manifest.deploymentCommit);
     }
   } catch {
-    localStorage.removeItem(INSTALLING_VERSION_KEY);
+    installingVersion = null;
     // Update checks are best-effort. Licensing and analysis calls surface their own errors.
   }
 }

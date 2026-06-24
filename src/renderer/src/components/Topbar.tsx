@@ -28,7 +28,7 @@ export function Topbar({ title, subtitle }: TopbarProps) {
     profile,
   } = useAppContext();
 
-  const displayName = profile?.fullName ?? "Guest User";
+  const displayName = profile?.fullName?.trim() || "Default User";
   const displayInitials = initials(displayName);
 
   return (

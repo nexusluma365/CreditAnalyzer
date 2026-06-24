@@ -1,22 +1,13 @@
 /**
  * claudeService.ts
  * -----------------
- * PLACEHOLDER. All functions return mock/sample data so the UI works fully
- * before a real API key is added.
+ * Builds a deterministic review summary from negative items saved after a
+ * credit report upload.
  *
  * Intended real responsibility (per the product spec):
  *   - Review overall report structure, account categorization, and
  *     surface workflow suggestions / quality checks on the analysis
  *     produced from a parsed credit report.
- *
- * TO GO LIVE LATER:
- *   1. Add a secure backend-provided Anthropic configuration.
- *   2. Replace the mock body of `reviewAnalysis` with a real call to
- *      https://api.anthropic.com/v1/messages, passing the extracted
- *      negative items as structured input and requesting structured
- *      JSON output (categoryCounts, notes, qualityFlags).
- *   3. Keep the return shape (AnalysisResult) stable — AnalysisResultsScreen
- *      and CategoriesScreen already render against it.
  *
  * COMPLIANCE: Output should present research-informed recommendations — describe
  * patterns, possibilities, and best-fit dispute paths, never assert a legal
@@ -62,7 +53,7 @@ export async function reviewAnalysis(
   return {
     reportId,
     generatedAt: new Date().toISOString(),
-    totalAccounts: items.length + 6, // mock: includes positive accounts not shown here
+    totalAccounts: items.length,
     totalNegativeItems: items.length,
     categoryCounts,
     overallRiskNote:

@@ -9,8 +9,8 @@
  *   is blocked by the browser/OS — every failure is swallowed silently.
  * - A single localStorage-backed on/off switch, exposed via Settings.
  *
- * PLACEHOLDER AUDIO ASSETS
- * -------------------------
+ * OPTIONAL AUDIO ASSETS
+ * ---------------------
  * This build does not ship binary audio files. Drop short (under ~600ms),
  * quiet, professional .mp3 or .wav files at the paths below and they will
  * be picked up automatically — no code changes required:

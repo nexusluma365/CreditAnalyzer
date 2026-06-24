@@ -6,7 +6,6 @@
  */
 
 import type { Client, CreditReportFile, NegativeItem, DisputeLetter, DisputeCase } from "@/types";
-import { mockClients } from "@/data/mockClients";
 import { secureGetJson, secureRemove, secureSetJson } from "./secureStorageService";
 
 interface DatabaseSnapshot {
@@ -19,8 +18,21 @@ interface DatabaseSnapshot {
 
 const STORAGE_KEY = "crap.secure.database.v3";
 
+export const DEFAULT_CLIENT_ID = "client-default";
+
+const defaultClient: Client = {
+  id: DEFAULT_CLIENT_ID,
+  fullName: "Default User",
+  email: "",
+  phone: "",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  activeDisputes: 0,
+  reportsCount: 0,
+  avatarColor: "#5b8def",
+};
+
 const seed: DatabaseSnapshot = {
-  clients: [...mockClients],
+  clients: [defaultClient],
   reports: [],
   negativeItems: [],
   letters: [],
@@ -33,13 +45,15 @@ async function readDb(): Promise<DatabaseSnapshot> {
     await writeDb(seed);
     return clone(seed);
   }
-  return {
-    clients: parsed.clients?.length ? parsed.clients : [...mockClients],
+  const snapshot = sanitizeSnapshot({
+    clients: parsed.clients?.length ? parsed.clients : [defaultClient],
     reports: parsed.reports ?? [],
     negativeItems: parsed.negativeItems ?? [],
     letters: parsed.letters ?? [],
     disputeCases: parsed.disputeCases ?? [],
-  };
+  });
+  await writeDb(snapshot);
+  return snapshot;
 }
 
 async function writeDb(next: DatabaseSnapshot) {
@@ -48,6 +62,39 @@ async function writeDb(next: DatabaseSnapshot) {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function sanitizeSnapshot(db: DatabaseSnapshot): DatabaseSnapshot {
+  const mockClientIds = new Set(
+    db.clients
+      .filter((client) => /^(Selen Swift|Devon Lane|Wade Warren|Darlene Robertson)$/i.test(client.fullName))
+      .map((client) => client.id)
+  );
+  const mockReportIds = new Set(
+    db.reports
+      .filter((report) => mockClientIds.has(report.clientId) || /^Selen_Swift_/i.test(report.fileName))
+      .map((report) => report.id)
+  );
+
+  const clients = db.clients
+    .filter((client) => !mockClientIds.has(client.id))
+    .map((client) =>
+      client.id === DEFAULT_CLIENT_ID
+        ? { ...defaultClient, ...client, fullName: client.fullName || defaultClient.fullName }
+        : client
+    );
+
+  if (!clients.some((client) => client.id === DEFAULT_CLIENT_ID)) {
+    clients.unshift(defaultClient);
+  }
+
+  return {
+    clients,
+    reports: db.reports.filter((report) => !mockReportIds.has(report.id) && !mockClientIds.has(report.clientId)),
+    negativeItems: db.negativeItems.filter((item) => !mockReportIds.has(item.reportId)),
+    letters: db.letters.filter((letter) => !mockClientIds.has(letter.clientId)),
+    disputeCases: db.disputeCases.filter((caseItem) => !mockClientIds.has(caseItem.clientId)),
+  };
 }
 
 function updateClientCounts(db: DatabaseSnapshot): DatabaseSnapshot {

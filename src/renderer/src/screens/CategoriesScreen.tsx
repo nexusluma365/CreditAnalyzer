@@ -40,6 +40,7 @@ export function CategoriesScreen() {
       return matchesCategory && matchesSearch;
     })
     .sort((a, b) => b.disputeOpportunityScore - a.disputeOpportunityScore);
+  const hasItems = items.length > 0;
 
   return (
     <div className="space-y-6">
@@ -64,6 +65,7 @@ export function CategoriesScreen() {
         <CategoryTile
           label="All Items"
           count={items.length}
+          showCount={hasItems}
           active={activeCategory === "all"}
           onClick={() => setActiveCategory("all")}
         />
@@ -72,6 +74,7 @@ export function CategoriesScreen() {
             key={cat}
             label={CATEGORY_LABELS[cat]}
             count={categoryCounts[cat] ?? 0}
+            showCount={hasItems}
             active={activeCategory === cat}
             onClick={() => setActiveCategory(cat)}
           />
@@ -150,11 +153,13 @@ export function CategoriesScreen() {
 function CategoryTile({
   label,
   count,
+  showCount,
   active,
   onClick,
 }: {
   label: string;
   count: number;
+  showCount: boolean;
   active: boolean;
   onClick: () => void;
 }) {
@@ -170,7 +175,7 @@ function CategoryTile({
     >
       <div className="flex items-center justify-between">
         <LayersIcon size={14} className={active ? "text-skyGlass-700" : "text-slate-400"} />
-        <DonutWheel value={Math.min(100, count * 12)} label={String(count)} tone={active ? "blue" : "brand"} size={58} />
+        <DonutWheel value={showCount ? Math.min(100, count * 12) : 0} label={showCount ? String(count) : "—"} tone={active ? "blue" : "brand"} size={58} />
       </div>
       <p className="mt-3 text-[11.5px] font-semibold text-slate-500">{label}</p>
     </button>

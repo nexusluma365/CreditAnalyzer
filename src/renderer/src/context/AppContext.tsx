@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Client, LicenseInfo } from "@/types";
-import { getClients } from "@/services/databaseService";
+import { DEFAULT_CLIENT_ID, getClients } from "@/services/databaseService";
 import { getStoredLicense } from "@/services/keygenLicenseService";
 import { getStoredProfile, getStoredProfileAsync, type UserProfile } from "@/services/userProfileService";
 
@@ -24,7 +24,7 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [activeClientId, setActiveClientId] = useState<string>("client-1");
+  const [activeClientId, setActiveClientId] = useState<string>(DEFAULT_CLIENT_ID);
   const [businessModeEnabled, setBusinessModeEnabled] = useState(false);
   const [license, setLicense] = useState<LicenseInfo>({
     key: null,
@@ -39,6 +39,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshClients = async () => {
     const list = await getClients();
     setClients(list);
+    if (!list.some((client) => client.id === activeClientId)) {
+      setActiveClientId(list[0]?.id ?? DEFAULT_CLIENT_ID);
+    }
   };
 
   useEffect(() => {

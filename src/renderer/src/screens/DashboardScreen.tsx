@@ -53,6 +53,7 @@ export function DashboardScreen() {
   const lastReport = reports[0];
   const licenseBadge = LICENSE_BADGE[license.status] ?? LICENSE_BADGE.inactive;
   const firstName = profile?.fullName?.split(" ")[0];
+  const hasReports = reports.length > 0;
 
   // Welcome prompt — shown once per session when no reports exist
   const [showWelcome, setShowWelcome] = useState(false);
@@ -167,14 +168,14 @@ export function DashboardScreen() {
         </Card>
 
         <Card glass className="flex items-center gap-5">
-          <DonutWheel value={Math.min(100, totalNegative * 8)} label={String(totalNegative)} sublabel="items" tone="warning" />
+          <DonutWheel value={hasReports ? Math.min(100, totalNegative * 8) : 0} label={hasReports ? String(totalNegative) : "—"} sublabel="items" tone="warning" />
           <div>
             <p className="text-[12.5px] font-semibold text-slate-500">Total negative items found</p>
             <div className="mt-2 flex items-baseline gap-2">
-              <Badge tone="warning">Across {reports.length || 1} report(s)</Badge>
+              <Badge tone="warning">Across {hasReports ? reports.length : "—"} report(s)</Badge>
             </div>
             <p className="mt-3 text-[12px] text-slate-500">
-              Spanning {Object.keys(categoryCounts).length} categories — review each for possible dispute opportunities.
+              Spanning {hasReports ? Object.keys(categoryCounts).length : "—"} categories — review each for possible dispute opportunities.
             </p>
             <button
               onClick={() => navigate("/categories")}
@@ -186,12 +187,12 @@ export function DashboardScreen() {
         </Card>
 
         <Card glass className="flex items-center gap-5">
-          <DonutWheel value={completionPct} label={`${completionPct}%`} sublabel="resolved" tone="brand" />
+          <DonutWheel value={hasReports ? completionPct : 0} label={hasReports ? `${completionPct}%` : "—"} sublabel="resolved" tone="brand" />
           <div className="flex-1">
             <p className="text-[12.5px] font-semibold text-slate-500">Dispute progress</p>
-            <ProgressBar value={completionPct} className="mt-4" />
+            <ProgressBar value={hasReports ? completionPct : 0} className="mt-4" />
             <p className="mt-3 text-[12px] text-slate-500">
-              {totalSent} of {cases.length || 0} dispute case(s) sent to bureaus.
+              {hasReports ? totalSent : "—"} of {hasReports ? cases.length : "—"} dispute case(s) sent to bureaus.
             </p>
           </div>
         </Card>
@@ -335,6 +336,11 @@ export function DashboardScreen() {
               </p>
             </div>
           ))}
+          {Object.keys(categoryCounts).length === 0 && (
+            <div className="col-span-full rounded-2xl border border-white/70 bg-white/45 px-4 py-4 text-center text-[13px] text-slate-500 shadow-soft">
+              — Upload a credit report to populate category totals.
+            </div>
+          )}
         </div>
       </Card>
 

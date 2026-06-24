@@ -35,6 +35,10 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Sidebar() {
   const { activeClient, profile } = useAppContext();
+  const displayName = profile?.fullName?.trim() || activeClient?.fullName || "Default User";
+  const disputeSummary = activeClient?.reportsCount
+    ? `${activeClient.activeDisputes} active dispute${activeClient.activeDisputes === 1 ? "" : "s"}`
+    : "—";
 
   return (
     <aside className="relative m-5 mr-0 flex h-[calc(100%-2.5rem)] w-[17rem] flex-shrink-0 flex-col overflow-hidden rounded-[2rem] glass-panel-strong">
@@ -94,18 +98,14 @@ export function Sidebar() {
                 backgroundColor: activeClient?.avatarColor ?? "#5d9ceb",
               }}
             >
-              {initials(activeClient?.fullName ?? profile?.fullName ?? "U")}
+              {initials(displayName)}
             </div>
             <div className="min-w-0 leading-tight">
               <div className="truncate text-[12.5px] font-semibold text-slate-700">
-                {activeClient?.fullName ?? profile?.fullName ?? "User"}
+                {displayName}
               </div>
               <div className="text-[10.5px] text-slate-400">
-                {activeClient
-                  ? `${activeClient.activeDisputes} active dispute${
-                      activeClient.activeDisputes === 1 ? "" : "s"
-                    }`
-                  : profile?.email ?? ""}
+                {profile?.email || disputeSummary}
               </div>
             </div>
           </div>

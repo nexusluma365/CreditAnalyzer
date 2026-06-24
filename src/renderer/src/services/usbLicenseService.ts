@@ -54,12 +54,15 @@ export async function validateUsbLicense(
   const fingerprint = window.electronAPI?.getMachineFingerprint
     ? await window.electronAPI.getMachineFingerprint()
     : "web";
+  const appInfo = window.electronAPI?.getAppVersion
+    ? await window.electronAPI.getAppVersion()
+    : { version: import.meta.env.VITE_APP_VERSION || "0.1.0" };
   try {
     const result = await apiPost<UsbValidationResult>("/api/validate-usb-license", {
       licenseKey: licenseRaw,
       fingerprint,
       usbDriveId: driveId ?? "",
-      appVersion: "0.1.0",
+      appVersion: appInfo.version,
     });
     if (result.valid) {
       await rememberUsbValidation(licenseRaw, driveId, result.maskedLicense ?? maskLicense(licenseRaw));

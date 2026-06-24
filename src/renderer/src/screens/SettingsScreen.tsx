@@ -10,8 +10,8 @@ const SUPPORT_EMAIL = "support@creditreportanalyzerpro.com";
 
 export function SettingsScreen() {
   const { profile, activeClient, license, setLicense, setProfile } = useAppContext();
-  const name = profile?.fullName ?? activeClient?.fullName ?? "User";
-  const email = profile?.email ?? activeClient?.email ?? "No email saved";
+  const name = profile?.fullName?.trim() || activeClient?.fullName || "Default User";
+  const email = profile?.email || activeClient?.email || "No email saved";
   const licensePreview = formatLicensePreview(license.key);
 
   return (
