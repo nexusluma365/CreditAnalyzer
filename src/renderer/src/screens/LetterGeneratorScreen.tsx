@@ -21,11 +21,17 @@ const BUREAUS: Bureau[] = ["Experian", "Equifax", "TransUnion"];
 
 export function LetterGeneratorScreen() {
   const location = useLocation();
-  const { activeClient, activeClientId } = useAppContext();
+  const { activeClient, activeClientId, profile } = useAppContext();
   const prefillItem = (location.state as { fromItem?: NegativeItem } | null)?.fromItem;
 
   const [form, setForm] = useState<GenerateLetterInput>({
-    consumerName: activeClient?.fullName ?? "",
+    consumerName: profile?.fullName ?? activeClient?.fullName ?? "",
+    consumerEmail: profile?.email ?? activeClient?.email,
+    consumerPhone: profile?.phone,
+    consumerAddress: profile?.address,
+    consumerCity: profile?.city,
+    consumerState: profile?.state,
+    consumerZip: profile?.zip,
     bureau: prefillItem?.bureausReporting[0] ?? "Experian",
     accountName: prefillItem?.creditorName ?? "",
     accountNumber: prefillItem?.accountNumberMasked ?? "",
@@ -41,10 +47,9 @@ export function LetterGeneratorScreen() {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (activeClient) {
-      setForm((f) => ({ ...f, consumerName: activeClient.fullName }));
-    }
-  }, [activeClient]);
+    const name = profile?.fullName ?? activeClient?.fullName;
+    if (name) setForm((f) => ({ ...f, consumerName: name }));
+  }, [activeClient, profile]);
 
   const handleGenerate = async () => {
     setGenerating(true);

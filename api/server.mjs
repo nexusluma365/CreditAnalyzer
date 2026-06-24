@@ -580,10 +580,29 @@ const LETTER_TYPE_CONTEXTS = {
   "escalation_letter": "Escalation letter — referencing prior unresolved dispute, noting intent to file CFPB/FTC complaint, citing FCRA §616 willful noncompliance risk.",
 };
 
-async function generateLetterWithOpenAI(input) {
-  if (!OPENAI_API_KEY) return fallbackLetter(input);
+function buildLetterPrompt(input) {
   const letterType = String(input.letterType || "collection_dispute");
   const letterContext = LETTER_TYPE_CONTEXTS[letterType] || "General credit dispute letter.";
+  const isCollector = letterType === "debt_validation" || letterType === "creditor_direct";
+
+  // Build sender header from profile fields
+  const senderLines = [
+    input.consumerName || "Consumer",
+    input.consumerAddress,
+    [input.consumerCity, input.consumerState, input.consumerZip].filter(Boolean).join(", "),
+    input.consumerPhone,
+    input.consumerEmail,
+  ].filter(Boolean);
+  const senderBlock = senderLines.join("\n");
+
+  const BUREAU_MAILING = {
+    Experian: "Experian\nP.O. Box 4500\nAllen, TX 75013",
+    Equifax: "Equifax Information Services LLC\nP.O. Box 740256\nAtlanta, GA 30374",
+    TransUnion: "TransUnion LLC Consumer Dispute Center\nP.O. Box 2000\nChester, PA 19016",
+  };
+  const recipientBlock = isCollector
+    ? "[Collection Agency / Original Creditor Name]\n[Street Address]\n[City, State ZIP]\n\n(Send via certified mail, return receipt requested — NOT to the bureau)"
+    : (BUREAU_MAILING[input.bureau] || `${input.bureau || "Credit Bureau"}\n[Bureau Address]`);
 
   const systemMsg = "You are a senior consumer protection attorney and credit dispute specialist with 20 years of experience. Before drafting any letter, you reason through the specific facts of the case, identify the strongest legal arguments under FCRA and FDCPA, and select the precise statutory provisions that apply to this consumer's situation. Your letters are professional, factually grounded, legally specific, and tailored — never generic. You frame your output as an educational draft that helps consumers understand their rights, always noting it is not legal advice and outcomes vary.";
 
@@ -594,50 +613,81 @@ Bureau: ${input.bureau || "Credit Bureau"}
 Category: ${input.category || "collections"}
 Letter Strategy: ${letterType}
 Legal Context: ${letterContext}
-Dispute Reason (consumer's stated concern): ${input.disputeReason || "Account appears inaccurate or unverifiable."}
+Dispute Reason: ${input.disputeReason || "Account appears inaccurate or unverifiable."}
 
 TASK
-Step 1 — Case Analysis (internal reasoning, do not include in the final letter):
-Analyze the facts above. What are the two or three strongest grounds for this specific dispute? Which exact FCRA/FDCPA sections apply based on the category and letter type? Are there any timing considerations (statute of limitations, 7-year rule, 30-day response windows)?
+Step 1 — Case Analysis (reasoning only, do NOT include in the final letter):
+Analyze the facts. What are the two or three strongest grounds for this specific dispute? Which exact FCRA/FDCPA sections apply? Any timing considerations (7-year rule, 30-day window, 4-business-day §605B requirement)?
 
-Step 2 — Draft the complete dispute letter:
-Write a full, professional letter. Include:
-- Today's date
-- Correct address block (for debt_validation or creditor_direct: use placeholder "[Collection Agency / Original Creditor — send via certified mail]"; for all others: use the correct bureau mailing address)
-- "Re:" subject line referencing the account
-- Professional salutation
-- 2-3 focused paragraphs that reference the specific FCRA/FDCPA sections identified in Step 1 — cite the U.S.C. section numbers directly (e.g., "15 U.S.C. § 1681i")
-- A clear, specific action request (investigate, delete, validate, block, correct, etc.)
-- Demand for written response within 30 days (or 4 business days for identity theft §605B cases)
-- Professional closing with consumer name and placeholder contact info fields
+Step 2 — Draft the complete letter using EXACTLY this format:
 
-End the letter with this exact note on its own line:
-"— Educational draft prepared by Luma Intelligence. This is not legal advice. Review all facts, personalize before sending, and consult a consumer attorney for guidance. Outcomes vary and are not guaranteed."
+${senderBlock}
 
-Bureau mailing addresses for reference:
-Experian: P.O. Box 4500, Allen, TX 75013
-Equifax: P.O. Box 740256, Atlanta, GA 30374
-TransUnion: P.O. Box 2000, Chester, PA 19016`;
+[Today's date — write the actual date]
 
+${recipientBlock}
+
+Re: [Subject line referencing account name and account number if available]
+
+To Whom It May Concern,
+
+[Body: 2–4 professional paragraphs citing specific U.S.C. section numbers (e.g., 15 U.S.C. § 1681i). Reference the strongest legal grounds from Step 1. Include a clear action request: investigate, delete, validate, block, or correct. Demand written response within 30 days (or 4 business days for §605B identity theft cases).]
+
+Sincerely,
+${input.consumerName || "Consumer"}
+
+— Educational draft prepared by Luma Intelligence. This is not legal advice. Review all facts, personalize before sending, and consult a consumer attorney for guidance. Outcomes vary and are not guaranteed.`;
+
+  return { systemMsg, userMsg };
+}
+
+async function generateLetterWithClaude(input) {
+  if (!ANTHROPIC_API_KEY) return null;
   try {
+    const { systemMsg, userMsg } = buildLetterPrompt(input);
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+        max_tokens: 2048,
+        system: systemMsg,
+        messages: [{ role: "user", content: userMsg }],
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data?.content?.[0]?.text ?? "";
+    return text.length > 200 ? text : null;
+  } catch { return null; }
+}
+
+async function generateLetterWithOpenAI(input) {
+  if (!OPENAI_API_KEY) return null;
+  try {
+    const { systemMsg, userMsg } = buildLetterPrompt(input);
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         temperature: 0.25,
-        messages: [
-          { role: "system", content: systemMsg },
-          { role: "user", content: userMsg },
-        ],
+        messages: [{ role: "system", content: systemMsg }, { role: "user", content: userMsg }],
       }),
     });
-    if (!response.ok) return fallbackLetter(input);
+    if (!response.ok) return null;
     const data = await response.json();
-    return data?.choices?.[0]?.message?.content || fallbackLetter(input);
-  } catch {
-    return fallbackLetter(input);
-  }
+    const text = data?.choices?.[0]?.message?.content ?? "";
+    return text.length > 200 ? text : null;
+  } catch { return null; }
+}
+
+async function generateLetter(input) {
+  return (
+    (await generateLetterWithClaude(input)) ??
+    (await generateLetterWithOpenAI(input)) ??
+    fallbackLetter(input)
+  );
 }
 
 const server = createServer(async (req, res) => {
@@ -728,7 +778,7 @@ const server = createServer(async (req, res) => {
       if (!isCreditReport(reportText)) {
         return sendJson(req, res, 422, {
           ok: false,
-          error: "This PDF does not appear to be a credit report. Please upload a PDF from Experian, Equifax, or TransUnion that includes your credit history and account information.",
+          error: "This file is not recognized as a credit report. To use this app, you need your official full credit report from one of the three major bureaus:\n\n• Experian — experian.com or call 1-888-397-3742\n• Equifax — equifax.com or call 1-800-685-1111\n• TransUnion — transunion.com or call 1-800-916-8800\n\nLog in or call, request your full credit report, and download it as a PDF. Then upload that file here.",
         });
       }
       // Claude → OpenAI → local deep scan
@@ -743,7 +793,7 @@ const server = createServer(async (req, res) => {
       rateLimit(req, "ai", AI_RATE_LIMIT_MAX);
       const body = await readJson(req);
       await requireValidLicense(body);
-      const letter = await generateLetterWithOpenAI(body);
+      const letter = await generateLetter(body);
       return sendJson(req, res, 200, { ok: true, id: randomUUID(), letter });
     }
 

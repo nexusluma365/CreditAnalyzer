@@ -142,16 +142,34 @@ function bodyFor(type: DisputeLetterType, input: GenerateLetterInput): string {
 
 export function buildLetterDraft(input: GenerateLetterInput): string {
   const isCollectorLetter = input.letterType === "debt_validation" || input.letterType === "creditor_direct";
-  const address = BUREAU_ADDRESSES[input.bureau] ?? input.bureau;
+  const recipientAddress = BUREAU_ADDRESSES[input.bureau] ?? input.bureau;
   const body = bodyFor(input.letterType, input);
 
-  const addressBlock = isCollectorLetter
+  const recipientBlock = isCollectorLetter
     ? `[Collection Agency / Original Creditor Name]\n[Street Address]\n[City, State ZIP]\n\nNote: ${COLLECTOR_SEND_NOTE}`
-    : address;
+    : recipientAddress;
 
-  return `${TODAY()}
+  // Build sender contact block from whatever the profile has
+  const addrLine1 = input.consumerAddress || "[Your Street Address]";
+  const addrLine2 = [
+    input.consumerCity || "[City]",
+    input.consumerState || "[State]",
+    input.consumerZip || "[ZIP]",
+  ].join(", ");
+  const phoneLine = input.consumerPhone || "[Phone Number]";
+  const emailLine = input.consumerEmail || "[Email Address]";
 
-${addressBlock}
+  const senderBlock = `${input.consumerName}
+${addrLine1}
+${addrLine2}
+${phoneLine}
+${emailLine}`;
+
+  return `${senderBlock}
+
+${TODAY()}
+
+${recipientBlock}
 
 Re: Formal Dispute — ${input.accountName}${input.accountNumber ? ` (Account ending ${input.accountNumber})` : ""}
 
@@ -159,15 +177,10 @@ To Whom It May Concern,
 
 ${body}
 
-I am including copies of supporting documents (if applicable) and request that all correspondence be directed to me in writing. Please investigate this matter and provide a written response within the timeframe required by applicable federal law.
+I am including copies of supporting documents (if applicable) and request that all correspondence be directed to me at the address listed above. Please investigate this matter and provide a written response within the timeframe required by applicable federal law.
 
 Sincerely,
 ${input.consumerName}
-
-[Your Address]
-[City, State ZIP]
-[Phone Number]
-[Email Address]
 
 ---
 ${DISCLAIMER}`;

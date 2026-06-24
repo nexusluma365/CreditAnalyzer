@@ -187,9 +187,9 @@ export function UploadScreen() {
         </div>
 
         {error && (
-          <div className="mt-4 flex items-start gap-3 rounded-xl border border-warning-500/25 bg-warning-500/10 px-4 py-3 text-[12.5px] text-warning-200">
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-warning-500/25 bg-warning-500/10 px-4 py-4 text-[12.5px] text-warning-200">
             <AlertTriangleIcon size={16} className="mt-0.5 flex-shrink-0 text-warning-400" />
-            <span>{error}</span>
+            <div className="whitespace-pre-line leading-relaxed">{error}</div>
           </div>
         )}
 

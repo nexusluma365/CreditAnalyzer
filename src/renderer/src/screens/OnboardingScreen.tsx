@@ -5,6 +5,8 @@ import {
   UserDetailIcon,
   MailIcon,
   KeyIcon,
+  PhoneIcon,
+  HomeIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
   WifiOffIcon,
@@ -40,9 +42,16 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
   const { setLicense, setProfile } = useAppContext();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [stateAbbr, setStateAbbr] = useState("");
+  const [zip, setZip] = useState("");
   const [licenseKey, setLicenseKey] = useState("");
   const [usbDetected, setUsbDetected] = useState(false);
   const [state, setState] = useState<ActivationState>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,8 +62,6 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
     });
     return () => { cancelled = true; };
   }, []);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [touched, setTouched] = useState(false);
 
   const nameValid = fullName.trim().length > 1;
   const emailValid = isEmailValid(email);
@@ -72,9 +79,6 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
     try {
       info = await activateLicense(licenseKey);
     } catch {
-      // activateLicense already catches network errors internally and
-      // resolves with an "inactive" LicenseInfo, but guard here too in
-      // case of an unexpected throw so the UI never crashes.
       info = {
         key: licenseKey.trim(),
         status: "inactive",
@@ -87,7 +91,15 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
     setLicense(info);
 
     if (info.status === "active") {
-      const profile = await saveProfile({ fullName: fullName.trim(), email: email.trim() });
+      const profile = await saveProfile({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        address: address.trim() || undefined,
+        city: city.trim() || undefined,
+        state: stateAbbr.trim() || undefined,
+        zip: zip.trim() || undefined,
+      });
       setProfile(profile);
       await markOnboardingComplete();
       setState("success");
@@ -105,7 +117,7 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
   const loading = state === "activating";
 
   return (
-    <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-grid-glow px-6">
+    <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-grid-glow px-6 py-8">
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/70 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-skyGlass-400/20 blur-3xl" />
 
@@ -120,34 +132,30 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
           </p>
         </div>
 
-        <div className="glass-panel-strong rounded-2xl p-7 shadow-glowLg">
-          <div className="space-y-4">
-            <Field
-              label="Full name"
-              icon={<UserDetailIcon size={16} />}
-              value={fullName}
-              onChange={setFullName}
-              placeholder="Jordan Avery"
-              invalid={touched && !nameValid}
-              autoFocus
-            />
-            <Field
-              label="Email address"
-              icon={<MailIcon size={16} />}
-              value={email}
-              onChange={setEmail}
-              placeholder="you@example.com"
-              type="email"
-              invalid={touched && !emailValid}
-            />
-            <Field
-              label="License key"
-              icon={<KeyIcon size={16} />}
-              value={licenseKey}
-              onChange={setLicenseKey}
-              placeholder="XXXX-XXXX-XXXX-XXXX"
-              invalid={touched && !keyValid}
-            />
+        <div className="glass-panel-strong max-h-[calc(100vh-220px)] overflow-y-auto rounded-2xl p-7 shadow-glowLg">
+          {/* Account info */}
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Your Information</p>
+          <div className="space-y-3.5">
+            <Field label="Full legal name" icon={<UserDetailIcon size={16} />} value={fullName} onChange={setFullName} placeholder="Jordan Avery" invalid={touched && !nameValid} autoFocus />
+            <Field label="Email address" icon={<MailIcon size={16} />} value={email} onChange={setEmail} placeholder="you@example.com" type="email" invalid={touched && !emailValid} />
+            <Field label="Phone number" icon={<PhoneIcon size={16} />} value={phone} onChange={setPhone} placeholder="(555) 000-0000" type="tel" />
+          </div>
+
+          {/* Mailing address — pre-fills dispute letters */}
+          <p className="mb-3 mt-5 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Mailing Address <span className="normal-case font-normal text-slate-400">(used to pre-fill dispute letters)</span></p>
+          <div className="space-y-3.5">
+            <Field label="Street address" icon={<HomeIcon size={16} />} value={address} onChange={setAddress} placeholder="1234 Main St" />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="City" icon={<HomeIcon size={16} />} value={city} onChange={setCity} placeholder="Springfield" />
+              <Field label="State" icon={<HomeIcon size={16} />} value={stateAbbr} onChange={setStateAbbr} placeholder="CA" />
+            </div>
+            <Field label="ZIP code" icon={<HomeIcon size={16} />} value={zip} onChange={setZip} placeholder="90210" />
+          </div>
+
+          {/* License */}
+          <p className="mb-3 mt-5 text-[11px] font-semibold uppercase tracking-widest text-slate-400">License</p>
+          <div className="space-y-3.5">
+            <Field label="License key" icon={<KeyIcon size={16} />} value={licenseKey} onChange={setLicenseKey} placeholder="XXXX-XXXX-XXXX-XXXX" invalid={touched && !keyValid} />
             {usbDetected && (
               <div className="rounded-xl border border-skyGlass-500/20 bg-skyGlass-500/10 px-3.5 py-2 text-[12px] text-skyGlass-700">
                 USB key detected — license pre-filled above.
@@ -171,19 +179,12 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
             </StatusMessage>
           )}
 
-          <Button
-            onClick={handleActivate}
-            disabled={loading || state === "success"}
-            fullWidth
-            size="lg"
-            className="mt-6"
-            hoverText="Enter App"
-          >
+          <Button onClick={handleActivate} disabled={loading || state === "success"} fullWidth size="lg" className="mt-6" hoverText="Enter App">
             {loading ? "Activating..." : "Activate License"}
           </Button>
 
           <p className="mx-auto mt-4 max-w-[17rem] text-center text-[11.5px] leading-relaxed text-slate-400">
-            Licensing powered by Keygen. Use the license key provided with your purchase.
+            Licensing powered by Keygen. Address and phone are stored locally only — never uploaded.
           </p>
         </div>
 
@@ -205,6 +206,7 @@ function Field({
   type = "text",
   invalid,
   autoFocus,
+  optional,
 }: {
   label: string;
   icon: React.ReactNode;
@@ -214,10 +216,13 @@ function Field({
   type?: string;
   invalid?: boolean;
   autoFocus?: boolean;
+  optional?: boolean;
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">{label}</label>
+      <label className="mb-1.5 block text-[12px] font-semibold text-slate-500">
+        {label}{optional && <span className="ml-1.5 font-normal text-slate-400">(optional)</span>}
+      </label>
       <div className="relative">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>
         <input

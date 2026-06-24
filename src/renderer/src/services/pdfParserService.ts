@@ -135,8 +135,14 @@ async function analyzeWithBackend(reportId: string, reportText: string, fileName
     const findings = Array.isArray(result.findings) ? result.findings : [];
     return findings.map((item, index) => normalizeApiItem(reportId, item, index)).filter(Boolean) as NegativeItem[];
   } catch (err) {
-    // Re-throw validation errors (not-a-credit-report) so they reach the UI
-    if (err instanceof Error && err.message.includes("credit report")) throw err;
+    // Re-throw any explicit server rejection (non-credit-report, unreadable file) so it reaches the UI
+    if (err instanceof Error && (
+      err.message.includes("credit report") ||
+      err.message.includes("not recognized") ||
+      err.message.includes("bureau") ||
+      err.message.includes("Experian") ||
+      err.message.includes("could not be read")
+    )) throw err;
     return [];
   }
 }

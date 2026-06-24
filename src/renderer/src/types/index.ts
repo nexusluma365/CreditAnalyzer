@@ -187,6 +187,12 @@ export type ThemeMode = "dark" | "light";
 
 export interface GenerateLetterInput {
   consumerName: string;
+  consumerEmail?: string;
+  consumerPhone?: string;
+  consumerAddress?: string;
+  consumerCity?: string;
+  consumerState?: string;
+  consumerZip?: string;
   bureau: Bureau;
   accountName: string;
   accountNumber: string;

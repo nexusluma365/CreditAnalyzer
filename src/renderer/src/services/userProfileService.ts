@@ -3,6 +3,11 @@ import { secureGetJson, secureRemove, secureSet, secureSetJson } from "./secureS
 export interface UserProfile {
   fullName: string;
   email: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   savedAt: string;
 }
 

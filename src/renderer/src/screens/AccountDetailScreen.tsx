@@ -262,6 +262,12 @@ export function AccountDetailScreen() {
 
     const input: GenerateLetterInput = {
       consumerName: profile?.fullName ?? activeClient?.fullName ?? "Consumer",
+      consumerEmail: profile?.email ?? activeClient?.email,
+      consumerPhone: profile?.phone,
+      consumerAddress: profile?.address,
+      consumerCity: profile?.city,
+      consumerState: profile?.state,
+      consumerZip: profile?.zip,
       bureau: item.bureausReporting[0] ?? "Experian",
       accountName: item.creditorName,
       accountNumber: item.accountNumberMasked,

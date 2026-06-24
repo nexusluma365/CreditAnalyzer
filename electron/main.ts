@@ -96,9 +96,12 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
   if (manual.length >= 40) return manual;
 
   throw new Error(
-    "Unable to extract text from this PDF. This can happen with scanned, image-only, encrypted, or heavily styled PDFs. " +
-    "Please try exporting a fresh copy of your credit report as a text-based PDF from your bureau's website " +
-    "(Experian, Equifax, or TransUnion), then re-upload."
+    "This file could not be read. It may be a scanned image, encrypted, or password-protected PDF — none of which can be analyzed.\n\n" +
+    "To use this app, you need your official credit report from one of the three bureaus:\n\n" +
+    "• Experian — experian.com or call 1-888-397-3742\n" +
+    "• Equifax — equifax.com or call 1-800-685-1111\n" +
+    "• TransUnion — transunion.com or call 1-800-916-8800\n\n" +
+    "Log in or call to request your full credit report, download it as a PDF, and upload that file here."
   );
 }
 
