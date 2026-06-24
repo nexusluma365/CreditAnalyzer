@@ -18,6 +18,7 @@
     "build:renderer": "vite build",
     "build:electron": "tsc -p electron/tsconfig.main.json && tsc -p electron/tsconfig.preload.json && node scripts/rename-preload.mjs",
     "build": "npm run build:renderer && npm run build:electron",
+    "build:icons": "node scripts/build-icons.mjs",
     "dist": "npm run build && electron-builder --mac --win",
     "start:api": "node api/server.mjs",
     "start": "cross-env ELECTRON_RUN_AS_NODE= electron dist-electron/main.js",
@@ -65,6 +66,7 @@
     },
     "mac": {
       "category": "public.app-category.finance",
+      "icon": "assets/icon.icns",
       "artifactName": "CreditAnalyzer.${ext}",
       "target": [
         "dmg"
@@ -72,6 +74,7 @@
     },
     "win": {
       "artifactName": "CreditAnalyzer Setup.${ext}",
+      "icon": "assets/icon.ico",
       "target": [
         "nsis"
       ]

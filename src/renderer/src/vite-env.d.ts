@@ -7,6 +7,7 @@ interface ElectronAPI {
   getMachineName: () => Promise<string>;
   getAppVersion: () => Promise<{ version: string; platform: string }>;
   reloadApp: () => Promise<boolean>;
+  updateAndInstall: (input: { downloadUrl: string; latestVersion: string }) => Promise<{ ok: boolean; message: string }>;
   apiRequest: (input: {
     url: string;
     method?: string;

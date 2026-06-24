@@ -107,7 +107,7 @@ Put these files on the USB:
 ```text
 CreditAnalyzer Setup.exe
 CreditAnalyzer.dmg
-START-HERE.pdf
+START-HERE.txt
 .credit-key/license.dat
 ```
 
@@ -115,7 +115,7 @@ The app also recognizes hidden JSON license files such as `.credit-key/license.j
 
 ## App update checks
 
-Packaged apps call `/api/app-update` on the configured Railway backend. When the backend deployment commit changes, the app refreshes its renderer once. To announce a packaged installer update, set `LATEST_APP_VERSION` plus `MAC_INSTALLER_URL` and/or `WINDOWS_INSTALLER_URL` on Railway, then deploy. The desktop app can detect that a newer installer exists; replacing the installed binary still requires a published installer/update feed.
+Packaged apps call `/api/app-update` on the configured Railway backend at launch, every minute, and whenever the device comes back online. When the backend deployment commit changes, the app refreshes its renderer once. To ship a packaged app update, set `LATEST_APP_VERSION` plus `MAC_INSTALLER_URL` and/or `WINDOWS_INSTALLER_URL` on Railway, then deploy. When a newer version and installer URL are available, the desktop app downloads the installer, launches it, and quits so the installer can complete the update.
 
 ## Compliance note
 

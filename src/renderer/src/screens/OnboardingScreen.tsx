@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import {
   ScaleIcon,
@@ -13,6 +13,7 @@ import { activateLicense } from "@/services/keygenLicenseService";
 import { saveProfile, markOnboardingComplete } from "@/services/userProfileService";
 import { playSound } from "@/services/soundService";
 import { useAppContext } from "@/context/AppContext";
+import { scanUsbLicense } from "@/services/usbLicenseService";
 import type { LicenseInfo } from "@/types";
 
 interface OnboardingScreenProps {
@@ -40,7 +41,18 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [licenseKey, setLicenseKey] = useState("");
+  const [usbDetected, setUsbDetected] = useState(false);
   const [state, setState] = useState<ActivationState>("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+    scanUsbLicense().then((scan) => {
+      if (cancelled || !scan.found || !scan.licenseRaw) return;
+      setLicenseKey(scan.licenseRaw);
+      setUsbDetected(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
 
@@ -136,6 +148,11 @@ export function OnboardingScreen({ onActivated }: OnboardingScreenProps) {
               placeholder="XXXX-XXXX-XXXX-XXXX"
               invalid={touched && !keyValid}
             />
+            {usbDetected && (
+              <div className="rounded-xl border border-skyGlass-500/20 bg-skyGlass-500/10 px-3.5 py-2 text-[12px] text-skyGlass-700">
+                USB key detected — license pre-filled above.
+              </div>
+            )}
           </div>
 
           {state === "success" && (

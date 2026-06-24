@@ -1,7 +1,8 @@
 import { apiGet } from "./apiClient";
 
-const UPDATE_POLL_MS = 15 * 60 * 1000;
+const UPDATE_POLL_MS = 60 * 1000;
 const LAST_BACKEND_COMMIT_KEY = "cra-pro:last-backend-commit";
+const INSTALLING_VERSION_KEY = "cra-pro:installing-version";
 
 interface AppUpdateManifest {
   appVersion: string;
@@ -15,10 +16,15 @@ interface AppUpdateManifest {
 
 export function startAppUpdateHeartbeat() {
   void checkForAppUpdates();
+  const handleOnline = () => void checkForAppUpdates();
+  window.addEventListener("online", handleOnline);
   const interval = window.setInterval(() => {
     void checkForAppUpdates();
   }, UPDATE_POLL_MS);
-  return () => window.clearInterval(interval);
+  return () => {
+    window.clearInterval(interval);
+    window.removeEventListener("online", handleOnline);
+  };
 }
 
 async function checkForAppUpdates() {
@@ -30,6 +36,22 @@ async function checkForAppUpdates() {
       `/api/app-update?version=${encodeURIComponent(appInfo.version)}&platform=${encodeURIComponent(appInfo.platform)}`
     );
 
+    if (manifest.updateAvailable) {
+      window.dispatchEvent(new CustomEvent("cra-pro:update-available", { detail: manifest }));
+      if (manifest.downloadUrl && window.electronAPI?.updateAndInstall) {
+        const installingVersion = localStorage.getItem(INSTALLING_VERSION_KEY);
+        if (installingVersion !== manifest.latestVersion) {
+          localStorage.setItem(INSTALLING_VERSION_KEY, manifest.latestVersion);
+          const result = await window.electronAPI.updateAndInstall({
+            downloadUrl: manifest.downloadUrl,
+            latestVersion: manifest.latestVersion,
+          });
+          if (!result.ok) localStorage.removeItem(INSTALLING_VERSION_KEY);
+          return;
+        }
+      }
+    }
+
     if (manifest.deploymentCommit && manifest.deploymentCommit !== "local") {
       const lastSeen = localStorage.getItem(LAST_BACKEND_COMMIT_KEY);
       if (lastSeen && lastSeen !== manifest.deploymentCommit && window.electronAPI?.reloadApp) {
@@ -39,11 +61,8 @@ async function checkForAppUpdates() {
       }
       localStorage.setItem(LAST_BACKEND_COMMIT_KEY, manifest.deploymentCommit);
     }
-
-    if (manifest.updateAvailable) {
-      window.dispatchEvent(new CustomEvent("cra-pro:update-available", { detail: manifest }));
-    }
   } catch {
+    localStorage.removeItem(INSTALLING_VERSION_KEY);
     // Update checks are best-effort. Licensing and analysis calls surface their own errors.
   }
 }

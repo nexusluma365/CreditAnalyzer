@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getMachineName: (): Promise<string> => ipcRenderer.invoke("machine:name"),
   getAppVersion: (): Promise<{ version: string; platform: string }> => ipcRenderer.invoke("app:version"),
   reloadApp: (): Promise<boolean> => ipcRenderer.invoke("app:reload"),
+  updateAndInstall: (input: { downloadUrl: string; latestVersion: string }): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke("app:updateAndInstall", input),
   apiRequest: (input: { url: string; method?: string; body?: unknown }) =>
     ipcRenderer.invoke("api:request", input),
   scanUsbLicense: (): Promise<{ found: boolean; licenseRaw: string | null; driveId: string | null }> =>

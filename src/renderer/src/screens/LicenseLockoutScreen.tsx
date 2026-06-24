@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import {
   ScaleIcon,
@@ -10,6 +10,7 @@ import {
 import { activateLicense } from "@/services/keygenLicenseService";
 import { playSound } from "@/services/soundService";
 import { useAppContext } from "@/context/AppContext";
+import { scanUsbLicense } from "@/services/usbLicenseService";
 import type { LicensePresentationState } from "@/services/licenseStateService";
 
 interface LicenseLockoutScreenProps {
@@ -47,9 +48,20 @@ const COPY: Record<
 export function LicenseLockoutScreen({ state, onRecovered }: LicenseLockoutScreenProps) {
   const { setLicense } = useAppContext();
   const [licenseKey, setLicenseKey] = useState("");
+  const [usbDetected, setUsbDetected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localState, setLocalState] = useState<LicensePresentationState>(state);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    scanUsbLicense().then((scan) => {
+      if (cancelled || !scan.found || !scan.licenseRaw) return;
+      setLicenseKey(scan.licenseRaw);
+      setUsbDetected(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const copy = COPY[state];
 
@@ -112,6 +124,12 @@ export function LicenseLockoutScreen({ state, onRecovered }: LicenseLockoutScree
               />
             </div>
           </div>
+
+          {usbDetected && (
+            <div className="mt-3 rounded-xl border border-skyGlass-500/20 bg-skyGlass-500/10 px-3.5 py-2 text-[12px] text-skyGlass-700">
+              USB key detected — license pre-filled above.
+            </div>
+          )}
 
           {localState === "activated" && (
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-brand-500/10 px-3.5 py-2.5 text-[12.5px] text-brand-400">

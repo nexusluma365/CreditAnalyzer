@@ -133,6 +133,26 @@ function AppGate() {
     return () => clearInterval(interval);
   }, [usbPhase, performUsbCheck]);
 
+  // Poll for USB insertion while in "skipped" state (no USB at boot).
+  // Transitions to the USB flow automatically if a key is inserted later.
+  useEffect(() => {
+    if (usbPhase !== "skipped") return;
+    const interval = setInterval(async () => {
+      const scan = await scanUsbLicense();
+      if (!scan.found || !scan.licenseRaw) return;
+      setUsbRequired(true);
+      const result = await validateUsbLicense(scan.licenseRaw, scan.driveId);
+      if (result.valid) {
+        setUsbPhase("unlocked");
+        setUsbReason(undefined);
+      } else {
+        setUsbPhase("locked");
+        setUsbReason(result.reason);
+      }
+    }, USB_POLL_MS);
+    return () => clearInterval(interval);
+  }, [usbPhase]);
+
   // ── Render logic ──────────────────────────────────────────────────────────
 
   if (booting) {

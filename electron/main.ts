@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, safeStorage, shell } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
@@ -21,6 +21,7 @@ const USB_SCAN_DEPTH = 3;
 
 const isDev = process.env.NODE_ENV === "development";
 let mainWindow: BrowserWindow | null = null;
+let updateInstallInProgress = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -91,6 +92,11 @@ ipcMain.handle("app:reload", async () => {
   mainWindow?.webContents.reloadIgnoringCache();
   return true;
 });
+ipcMain.handle(
+  "app:updateAndInstall",
+  async (_event, input: { downloadUrl: string; latestVersion: string }) =>
+    downloadAndLaunchInstaller(input)
+);
 
 ipcMain.handle("usb:scan", async () => {
   const drives = await getRemovableDrivePaths();
@@ -125,6 +131,55 @@ ipcMain.handle(
     return { ok: response.ok, status: response.status, data };
   }
 );
+
+async function downloadAndLaunchInstaller(input: { downloadUrl: string; latestVersion: string }) {
+  if (isDev) {
+    return { ok: false, message: "Auto-install updates are disabled in development." };
+  }
+  if (updateInstallInProgress) {
+    return { ok: true, message: "An update is already downloading." };
+  }
+
+  const url = new URL(input.downloadUrl);
+  if (!["https:", "http:"].includes(url.protocol)) {
+    throw new Error("Unsupported update URL protocol.");
+  }
+
+  updateInstallInProgress = true;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Update download failed (${response.status}).`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const updateDir = path.join(app.getPath("userData"), "updates");
+    await fs.mkdir(updateDir, { recursive: true });
+    const installerPath = path.join(
+      updateDir,
+      `CreditAnalyzer-${sanitizeFilePart(input.latestVersion || app.getVersion())}${installerExtension(url)}`
+    );
+    await fs.writeFile(installerPath, Buffer.from(arrayBuffer));
+    const openError = await shell.openPath(installerPath);
+    if (openError) throw new Error(openError);
+    setTimeout(() => app.quit(), 2500);
+    return { ok: true, message: "Update installer launched. The app will close so the update can finish." };
+  } catch (error) {
+    updateInstallInProgress = false;
+    throw error;
+  }
+}
+
+function installerExtension(url: URL): string {
+  const ext = path.extname(url.pathname);
+  if (ext) return ext;
+  if (process.platform === "win32") return ".exe";
+  if (process.platform === "darwin") return ".dmg";
+  return ".bin";
+}
+
+function sanitizeFilePart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-|-$/g, "") || "update";
+}
 
 async function getRemovableDrivePaths(): Promise<string[]> {
   const candidates: string[] = [];
