@@ -62,6 +62,7 @@
       "dist-electron/**/*",
       "package.json"
     ],
+    "asarUnpack": ["**/node_modules/pdf-parse/**/*"],
     "directories": {
       "buildResources": "assets",
       "output": "release"

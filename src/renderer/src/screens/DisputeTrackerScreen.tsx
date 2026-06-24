@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Card, Badge } from "@/components/ui";
+import { useNavigate } from "react-router-dom";
+import { Card, Badge, Button } from "@/components/ui";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
+import { UploadIcon } from "@/components/Icons";
 import { useAppContext } from "@/context/AppContext";
 import { getDisputeCases, upsertDisputeCase } from "@/services/databaseService";
 import { DISPUTE_STATUSES, CATEGORY_LABELS, type DisputeCase, type DisputeStatus } from "@/types";
@@ -22,6 +24,7 @@ const STATUS_DOT: Record<DisputeStatus, string> = {
 };
 
 export function DisputeTrackerScreen() {
+  const navigate = useNavigate();
   const { activeClientId } = useAppContext();
   const [cases, setCases] = useState<DisputeCase[]>([]);
 
@@ -37,6 +40,20 @@ export function DisputeTrackerScreen() {
   return (
     <div className="space-y-5 lg:space-y-6">
       <DisclaimerBanner compact />
+
+      {cases.length === 0 && (
+        <Card className="text-center py-10">
+          <p className="text-[14px] font-semibold text-slate-600">No dispute cases yet.</p>
+          <p className="mt-1 text-[12.5px] text-slate-500">
+            Upload a credit report and generate a dispute letter to start tracking cases here.
+          </p>
+          <div className="mt-5 flex justify-center">
+            <Button onClick={() => navigate("/upload")} variant="secondary" icon={<UploadIcon size={15} />}>
+              Upload a report
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {DISPUTE_STATUSES.map((status) => {

@@ -7,6 +7,7 @@ import {
   TrackerIcon,
   SettingsIcon,
   ScaleIcon,
+  FileTextIcon,
 } from "./Icons";
 import { useAppContext } from "@/context/AppContext";
 import { playSound } from "@/services/soundService";
@@ -22,6 +23,7 @@ const navItems: NavItem[] = [
   { to: "/upload", label: "Upload", icon: UploadIcon },
   { to: "/analysis", label: "Analysis", icon: FileSearchIcon },
   { to: "/categories", label: "Negative Items", icon: LayersIcon },
+  { to: "/letters", label: "Letters", icon: FileTextIcon },
   { to: "/tracker", label: "Tracker", icon: TrackerIcon },
 ];
 

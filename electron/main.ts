@@ -89,12 +89,17 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
     const result = await pdfParse(buffer, { max: 0 });
     const text = cleanExtractedText(result.text ?? "");
     if (text.length >= 40) return text.slice(0, 180000);
-  } catch {
-    // fall through to manual extractor
-  }
+  } catch { /* fall through to manual extractor */ }
 
   // Fallback: manual zlib + text-operator extractor for unusual PDFs
-  return extractTextManual(buffer);
+  const manual = extractTextManual(buffer);
+  if (manual.length >= 40) return manual;
+
+  throw new Error(
+    "Unable to extract text from this PDF. This can happen with scanned, image-only, encrypted, or heavily styled PDFs. " +
+    "Please try exporting a fresh copy of your credit report as a text-based PDF from your bureau's website " +
+    "(Experian, Equifax, or TransUnion), then re-upload."
+  );
 }
 
 ipcMain.handle("machine:fingerprint", async () => getMachineFingerprint());
@@ -442,12 +447,7 @@ function extractTextManual(buffer: Buffer): string {
   }
 
   const text = cleanExtractedText(chunks.join("\n"));
-  if (text.length < 40) {
-    throw new Error(
-      "This PDF appears to be scanned, image-only, encrypted, or otherwise unreadable. Please upload a text-based credit report PDF."
-    );
-  }
-  return text.slice(0, 180000);
+  return text.length < 40 ? "" : text.slice(0, 180000);
 }
 
 function inflateMaybe(buf: Buffer): Buffer | null {
