@@ -103,10 +103,12 @@ ipcMain.handle("usb:scan", async () => {
   for (const drivePath of drives) {
     const licenseRaw = await findUsbLicenseValue(drivePath);
     if (licenseRaw) {
-      return { found: true, licenseRaw, driveId: drivePath };
+      return { found: true, licenseRaw, driveId: drivePath, drivesDetected: drives };
     }
   }
-  return { found: false, licenseRaw: null, driveId: null };
+  // Return drives list even when no license file found so the UI can distinguish
+  // "no USB plugged in" from "USB present but missing license file".
+  return { found: false, licenseRaw: null, driveId: null, drivesDetected: drives };
 });
 
 ipcMain.handle("secureStore:get", async (_event, key: string) => readSecureValue(key));

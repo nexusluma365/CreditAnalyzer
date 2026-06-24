@@ -381,12 +381,13 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/validate-usb-license") {
       const body = await readJson(req);
       const licenseKey = String(body.licenseKey ?? "").trim();
-      const fingerprint = String(body.fingerprint ?? "").trim();
       if (!licenseKey) {
         return sendJson(req, res, 400, { valid: false, reason: "Missing license key.", maskedLicense: null });
       }
       try {
-        const result = await validateLicenseWithKeygen({ licenseKey, fingerprint });
+        // USB dongle is the authentication factor — do not scope by machine fingerprint.
+        // The physical key being present is sufficient; fingerprint binding is for keyboard licenses.
+        const result = await validateLicenseWithKeygen({ licenseKey, fingerprint: "" });
         const maskedLicense = maskLicenseKey(licenseKey);
         if (result.valid) {
           return sendJson(req, res, 200, { valid: true, reason: result.message || "License validated.", maskedLicense });

@@ -59,9 +59,11 @@ function AppGate() {
   const [usbPhase, setUsbPhase] = useState<UsbPhase>("checking");
   const [usbReason, setUsbReason] = useState<string | undefined>(undefined);
   const [usbRequired, setUsbRequired] = useState(false);
+  const [usbDrivesDetected, setUsbDrivesDetected] = useState<string[]>([]);
 
   const performUsbCheck = useCallback(async () => {
     const scan = await scanUsbLicense();
+    setUsbDrivesDetected(scan.drivesDetected ?? []);
     if (!scan.found || !scan.licenseRaw) {
       if (usbRequired) {
         setUsbPhase("locked");
@@ -166,7 +168,7 @@ function AppGate() {
 
   // USB key is present but license is invalid / expired / server unreachable
   if (usbPhase === "locked") {
-    return <UsbLockScreen reason={usbReason} />;
+    return <UsbLockScreen reason={usbReason} drivesDetected={usbDrivesDetected} />;
   }
 
   // USB key found and validated — go straight to the main app

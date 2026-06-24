@@ -1,0 +1,129 @@
+name: Build & Release Installers
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-mac:
+    name: Build macOS installer
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer + Electron
+        run: npm run build
+
+      - name: Package macOS DMG
+        run: npm run package:mac
+        env:
+          # Optional: set these secrets in GitHub → Settings → Secrets to
+          # produce a signed/notarized DMG. Leave unset for unsigned builds.
+          CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-installer
+          path: |
+            release/CreditAnalyzer.dmg
+            release/CreditAnalyzer.dmg.blockmap
+            release/latest-mac.yml
+          retention-days: 30
+
+  build-win:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer + Electron
+        run: npm run build
+
+      - name: Package Windows NSIS installer
+        run: npm run package:win
+        env:
+          # Optional: set these secrets for code-signed Windows builds.
+          WIN_CSC_LINK: ${{ secrets.WIN_CERT_P12_BASE64 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-installer
+          path: |
+            release/CreditAnalyzer Setup.exe
+            release/CreditAnalyzer Setup.exe.blockmap
+            release/latest.yml
+          retention-days: 30
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-installer
+          path: release/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: win-installer
+          path: release/
+
+      - name: Read version from package.json
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-build.${{ github.run_number }}
+          name: "Credit Report Analyzer Pro v${{ steps.version.outputs.version }} (build ${{ github.run_number }})"
+          body: |
+            Automated build from commit ${{ github.sha }}
+
+            **Downloads**
+            - `CreditAnalyzer.dmg` — macOS installer
+            - `CreditAnalyzer Setup.exe` — Windows installer
+          files: |
+            release/CreditAnalyzer.dmg
+            release/CreditAnalyzer Setup.exe
+            release/latest-mac.yml
+            release/latest.yml
+          draft: false
+          prerelease: false

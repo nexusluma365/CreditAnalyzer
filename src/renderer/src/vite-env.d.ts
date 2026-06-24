@@ -13,7 +13,7 @@ interface ElectronAPI {
     method?: string;
     body?: unknown;
   }) => Promise<{ ok: boolean; status: number; data: unknown }>;
-  scanUsbLicense: () => Promise<{ found: boolean; licenseRaw: string | null; driveId: string | null }>;
+  scanUsbLicense: () => Promise<{ found: boolean; licenseRaw: string | null; driveId: string | null; drivesDetected?: string[] }>;
   secureStore: {
     get: (key: string) => Promise<string | null>;
     set: (key: string, value: string) => Promise<boolean>;

@@ -8,6 +8,7 @@ export interface UsbScanResult {
   found: boolean;
   licenseRaw: string | null;
   driveId: string | null;
+  drivesDetected?: string[];
 }
 
 export interface UsbValidationResult {

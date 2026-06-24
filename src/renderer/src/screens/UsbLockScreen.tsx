@@ -2,6 +2,7 @@ import { ScaleIcon, LockIcon, AlertTriangleIcon } from "@/components/Icons";
 
 interface UsbLockScreenProps {
   reason?: string;
+  drivesDetected?: string[];
 }
 
 /**
@@ -9,7 +10,8 @@ interface UsbLockScreenProps {
  * a backend validation check. Polls silently in the background (via
  * AppGate) and unlocks automatically once a valid USB key is detected.
  */
-export function UsbLockScreen({ reason }: UsbLockScreenProps) {
+export function UsbLockScreen({ reason, drivesDetected }: UsbLockScreenProps) {
+  const driveFound = drivesDetected && drivesDetected.length > 0;
   return (
     <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-grid-glow px-6">
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/70 blur-3xl" />
@@ -34,7 +36,9 @@ export function UsbLockScreen({ reason }: UsbLockScreenProps) {
           </div>
 
           <p className="mt-3 text-[12.5px] leading-relaxed text-slate-500">
-            Please plug in your Credit Analyzer USB key to continue.
+            {driveFound
+              ? "A USB drive was detected but no license file was found on it. Make sure your Credit Analyzer USB key has a license file."
+              : "Please plug in your Credit Analyzer USB key to continue."}
           </p>
 
           {reason && (
