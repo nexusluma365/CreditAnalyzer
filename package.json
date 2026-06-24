@@ -1,7 +1,7 @@
 {
   "name": "credit-report-analyzer-pro",
   "productName": "Credit Report Analyzer Pro",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI-assisted credit report analysis and dispute letter drafting — research-informed dispute strategy tool",
   "main": "dist-electron/main.js",
   "author": "Credit Report Analyzer Pro",
@@ -65,7 +65,9 @@
       "dist-electron/**/*",
       "package.json"
     ],
-    "asarUnpack": ["**/node_modules/pdf-parse/**/*"],
+    "asarUnpack": [
+      "**/node_modules/pdf-parse/**/*"
+    ],
     "directories": {
       "buildResources": "assets",
       "output": "release"
