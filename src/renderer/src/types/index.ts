@@ -1,4 +1,4 @@
-// Core domain types. Mock data (src/data) and placeholder services
+// Core domain types. Screens and persistence services
 // (src/services) are both built against these so swapping in a real
 // backend later (SQLite, OpenAI, Claude, Keygen) means only the services
 // change — components and screens stay the same.
