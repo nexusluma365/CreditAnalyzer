@@ -583,28 +583,61 @@ const LETTER_TYPE_CONTEXTS = {
 async function generateLetterWithOpenAI(input) {
   if (!OPENAI_API_KEY) return fallbackLetter(input);
   const letterType = String(input.letterType || "collection_dispute");
-  const letterContext = LETTER_TYPE_CONTEXTS[letterType] || "General credit dispute letter — request investigation of inaccurate or unverifiable information on the credit report.";
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.35,
-      messages: [
-        {
-          role: "system",
-          content: "You are a professional credit dispute letter writer. Write complete, professional dispute letters using the consumer's actual information. Cite relevant law. Frame all advice as educational suggestions — never guarantee outcomes, deletions, score changes, or approvals. Use plain, confident, professional language.",
-        },
-        {
-          role: "user",
-          content: `Write a ${letterType} letter using these details:\nConsumer: ${input.consumerName || "Consumer"}\nAccount: ${input.accountName || "Account"} (${input.accountNumber || "—"})\nBureau: ${input.bureau || "Credit Bureau"}\nDispute reason: ${input.disputeReason || "Inaccurate or unverifiable information"}\nCategory: ${input.category || "—"}\nLetter strategy context: ${letterContext}\n\nWrite a complete letter including date, bureau address (or collector address if this is a debt_validation or creditor_direct letter), salutation, 2-3 paragraph body with appropriate FCRA/FDCPA citations, specific request for investigation/removal/validation, 30-day response reminder, and signature block. End with: "Note: This is an educational draft template suggested by Luma Intelligence. Review all details and consult a consumer attorney for legal guidance. Outcomes vary and are not guaranteed."`,
-        },
-      ],
-    }),
-  });
-  if (!response.ok) return fallbackLetter(input);
-  const data = await response.json();
-  return data?.choices?.[0]?.message?.content || fallbackLetter(input);
+  const letterContext = LETTER_TYPE_CONTEXTS[letterType] || "General credit dispute letter.";
+
+  const systemMsg = "You are a senior consumer protection attorney and credit dispute specialist with 20 years of experience. Before drafting any letter, you reason through the specific facts of the case, identify the strongest legal arguments under FCRA and FDCPA, and select the precise statutory provisions that apply to this consumer's situation. Your letters are professional, factually grounded, legally specific, and tailored — never generic. You frame your output as an educational draft that helps consumers understand their rights, always noting it is not legal advice and outcomes vary.";
+
+  const userMsg = `DISPUTE CASE BRIEF
+Consumer: ${input.consumerName || "Consumer"}
+Account / Creditor: ${input.accountName || "Unknown Account"} (${input.accountNumber ? `ending ${input.accountNumber}` : "no account number"})
+Bureau: ${input.bureau || "Credit Bureau"}
+Category: ${input.category || "collections"}
+Letter Strategy: ${letterType}
+Legal Context: ${letterContext}
+Dispute Reason (consumer's stated concern): ${input.disputeReason || "Account appears inaccurate or unverifiable."}
+
+TASK
+Step 1 — Case Analysis (internal reasoning, do not include in the final letter):
+Analyze the facts above. What are the two or three strongest grounds for this specific dispute? Which exact FCRA/FDCPA sections apply based on the category and letter type? Are there any timing considerations (statute of limitations, 7-year rule, 30-day response windows)?
+
+Step 2 — Draft the complete dispute letter:
+Write a full, professional letter. Include:
+- Today's date
+- Correct address block (for debt_validation or creditor_direct: use placeholder "[Collection Agency / Original Creditor — send via certified mail]"; for all others: use the correct bureau mailing address)
+- "Re:" subject line referencing the account
+- Professional salutation
+- 2-3 focused paragraphs that reference the specific FCRA/FDCPA sections identified in Step 1 — cite the U.S.C. section numbers directly (e.g., "15 U.S.C. § 1681i")
+- A clear, specific action request (investigate, delete, validate, block, correct, etc.)
+- Demand for written response within 30 days (or 4 business days for identity theft §605B cases)
+- Professional closing with consumer name and placeholder contact info fields
+
+End the letter with this exact note on its own line:
+"— Educational draft prepared by Luma Intelligence. This is not legal advice. Review all facts, personalize before sending, and consult a consumer attorney for guidance. Outcomes vary and are not guaranteed."
+
+Bureau mailing addresses for reference:
+Experian: P.O. Box 4500, Allen, TX 75013
+Equifax: P.O. Box 740256, Atlanta, GA 30374
+TransUnion: P.O. Box 2000, Chester, PA 19016`;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        temperature: 0.25,
+        messages: [
+          { role: "system", content: systemMsg },
+          { role: "user", content: userMsg },
+        ],
+      }),
+    });
+    if (!response.ok) return fallbackLetter(input);
+    const data = await response.json();
+    return data?.choices?.[0]?.message?.content || fallbackLetter(input);
+  } catch {
+    return fallbackLetter(input);
+  }
 }
 
 const server = createServer(async (req, res) => {

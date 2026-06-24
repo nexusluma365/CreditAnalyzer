@@ -139,6 +139,12 @@ module.exports = {
         "ring-spin": "ring-spin 1.6s linear infinite",
         shimmer: "shimmer 2.5s linear infinite",
       },
+      transitionTimingFunction: {
+        smooth: "cubic-bezier(0.4, 0, 0.2, 1)",
+      },
+      transitionDuration: {
+        DEFAULT: "200ms",
+      },
     },
   },
   plugins: [],

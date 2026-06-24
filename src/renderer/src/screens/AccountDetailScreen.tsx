@@ -65,7 +65,7 @@ export function AccountDetailScreen() {
             <Badge tone="brand" className="mb-2.5">
               {CATEGORY_LABELS[item.category]}
             </Badge>
-            <h2 className="text-[20px] font-bold text-slate-700">{item.creditorName}</h2>
+            <h2 className="text-[20px] font-bold text-slate-700" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>{item.creditorName}</h2>
             <p className="mt-1 text-[13px] text-slate-500">{item.accountNumberMasked}</p>
           </div>
           <div className="flex flex-col items-end">
@@ -120,7 +120,7 @@ export function AccountDetailScreen() {
 
       <Card>
         <CardHeader title="Analyst Notes" />
-        <p className="text-[13px] leading-relaxed text-slate-600">{item.notes}</p>
+        <p className="text-[13.5px] leading-7 text-slate-600">{item.notes}</p>
       </Card>
 
       <Card className="border-accentBlue-500/20 bg-accentBlue-500/5">
@@ -137,7 +137,7 @@ export function AccountDetailScreen() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="transition-all duration-200">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[13px] font-medium text-slate-500">Recommended letter type</p>
@@ -156,54 +156,59 @@ export function AccountDetailScreen() {
         </div>
       </Card>
 
-      {(letterState === "generating" || letter) && (
+      {letterState === "generating" && (
         <Card glow>
-          <CardHeader
-            title="Dispute Letter Preview"
-            action={
-              letter && (
-                <Badge tone="brand">
-                  <CheckCircleIcon size={12} /> Ready
-                </Badge>
-              )
-            }
-          />
-
-          {letterState === "generating" && (
-            <div className="flex flex-col items-center justify-center rounded-2xl bg-white/50 py-14 text-center shadow-soft">
-              <UiverseCloudLoader />
-              <p className="mt-4 text-[13px] font-semibold text-slate-600">
-                Writing your recommended dispute letter...
-              </p>
-              <p className="mt-1 text-[12px] text-slate-500">
-                Using the selected negative item, bureau, issue flags, and suggested dispute reason.
-              </p>
-            </div>
-          )}
-
-          {letter && letterState !== "generating" && (
-            <>
-              <div className="rounded-2xl border border-white/70 bg-white/60 p-5 shadow-soft">
-                <h3 className="text-[15px] font-bold text-slate-700">{letter.title}</h3>
-                <pre className="mt-4 max-h-[520px] whitespace-pre-wrap rounded-xl bg-white/55 p-4 font-sans text-[12.5px] leading-relaxed text-slate-700">
-                  {letter.bodyText}
-                </pre>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Button onClick={handleDownloadLetter} icon={<DownloadIcon size={15} />} hoverText="Save PDF">
-                  Download Letter
-                </Button>
-                <Button variant="secondary" onClick={() => navigate("/letters", { state: { fromItem: item } })}>
-                  Edit Letter
-                </Button>
-                {downloadMessage && (
-                  <span className="text-[12px] font-medium text-slate-500">{downloadMessage}</span>
-                )}
-              </div>
-            </>
-          )}
+          <div className="flex flex-col items-center justify-center rounded-2xl bg-white/50 py-14 text-center shadow-soft">
+            <UiverseCloudLoader />
+            <p className="mt-4 text-[13px] font-semibold text-slate-600">
+              Writing your recommended dispute letter...
+            </p>
+            <p className="mt-1 text-[12px] text-slate-500">
+              Using the selected negative item, bureau, issue flags, and suggested dispute reason.
+            </p>
+          </div>
         </Card>
+      )}
+
+      {letter && letterState !== "generating" && (
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-md">
+          {/* Document header */}
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-6 py-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Dispute Letter</p>
+              <h3 className="mt-0.5 text-[14px] font-bold text-slate-700">{letter.title}</h3>
+            </div>
+            <Badge tone="brand">
+              <CheckCircleIcon size={12} /> Ready
+            </Badge>
+          </div>
+
+          {/* Scrollable letter body */}
+          <div className="max-h-[460px] overflow-y-auto px-8 py-7">
+            <div
+              className="whitespace-pre-wrap text-[13px] leading-7 text-slate-700"
+              style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}
+            >
+              {letter.bodyText}
+            </div>
+          </div>
+
+          {/* Sticky action bar — always visible, never hidden under letter */}
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
+            <Button onClick={handleDownloadLetter} icon={<DownloadIcon size={15} />} hoverText="Save PDF">
+              Download Letter
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => navigate("/letters", { state: { fromItem: item } })}
+            >
+              Edit in Letter Studio
+            </Button>
+            {downloadMessage && (
+              <span className="text-[11.5px] font-medium text-slate-500">{downloadMessage}</span>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -213,7 +218,7 @@ export function AccountDetailScreen() {
     setLetterState("generating");
     setDownloadMessage(null);
     const input: GenerateLetterInput = {
-      consumerName: activeClient?.fullName ?? profile?.fullName ?? "Consumer Name",
+      consumerName: profile?.fullName ?? activeClient?.fullName ?? "Consumer",
       bureau: item.bureausReporting[0] ?? "Experian",
       accountName: item.creditorName,
       accountNumber: item.accountNumberMasked,

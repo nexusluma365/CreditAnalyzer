@@ -26,7 +26,10 @@
     "package:win": "npm run build && electron-builder --win",
     "package:all": "npm run build && electron-builder --mac --win",
     "typecheck": "tsc --noEmit -p src/renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.main.json && tsc --noEmit -p electron/tsconfig.preload.json",
-    "prepare:usb": "node scripts/prepare-usb-release.mjs"
+    "prepare:usb": "node scripts/prepare-usb-release.mjs",
+    "release": "node scripts/publish-release.mjs",
+    "release:minor": "node scripts/publish-release.mjs minor",
+    "release:major": "node scripts/publish-release.mjs major"
   },
   "dependencies": {
     "pdf-parse": "^1.1.1",
