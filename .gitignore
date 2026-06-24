@@ -10,3 +10,4 @@ src/renderer/src/**/*.js.map
 .DS_Store
 .env
 .env.local
+scripts/Complete_Credit_Repair_Kit*
