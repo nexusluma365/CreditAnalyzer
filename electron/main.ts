@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
+import pdfParse from "pdf-parse";
 
 const USB_LICENSE_PATH = path.join(".credit-key", "license.dat");
 const USB_LICENSE_FILENAMES = new Set([
@@ -81,6 +82,20 @@ ipcMain.handle("pdf:extractText", async (_event, filePath: string) => {
   const buffer = await fs.readFile(filePath);
   return extractTextFromPdfBuffer(buffer);
 });
+
+async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
+  // Primary: use pdf-parse (Mozilla PDF.js — handles all standard PDF structures)
+  try {
+    const result = await pdfParse(buffer, { max: 0 });
+    const text = cleanExtractedText(result.text ?? "");
+    if (text.length >= 40) return text.slice(0, 180000);
+  } catch {
+    // fall through to manual extractor
+  }
+
+  // Fallback: manual zlib + text-operator extractor for unusual PDFs
+  return extractTextManual(buffer);
+}
 
 ipcMain.handle("machine:fingerprint", async () => getMachineFingerprint());
 ipcMain.handle("machine:name", async () => `${os.hostname()} (${process.platform})`);
@@ -410,14 +425,14 @@ function getMachineFingerprint() {
   return `cra-${crypto.createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 48)}`;
 }
 
-function extractTextFromPdfBuffer(buffer: Buffer): string {
+function extractTextManual(buffer: Buffer): string {
   const chunks: string[] = [];
   const raw = buffer.toString("latin1");
 
   // Extract plain text objects.
   chunks.push(...decodePdfTextOperators(raw));
 
-  // Extract common FlateDecode streams. This covers many generated credit reports.
+  // Extract common FlateDecode streams.
   const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
   let match: RegExpExecArray | null;
   while ((match = streamRegex.exec(raw))) {
