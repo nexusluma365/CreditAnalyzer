@@ -23,6 +23,13 @@ export interface ParsedReportResult {
   items: NegativeItem[];
 }
 
+export interface AnalysisProgressEvent {
+  progress: number;
+  message: string;
+}
+
+export type AnalysisProgressCallback = (event: AnalysisProgressEvent) => void;
+
 interface AnalyzeApiResponse {
   summary?: string;
   findings?: Array<Partial<NegativeItem> & { label?: string; priority?: string; summary?: string; category?: string }>;
@@ -48,9 +55,15 @@ const CATEGORY_BANK: Array<{
   { category: "public_records", label: "Public Records", terms: ["bankruptcy", "public record", "court", "judgment", "lien", "lexisnexis"], names: ["LexisNexis Risk Solutions", "County Court Record", "Bankruptcy Court", "Public Record Vendor"], letter: "method_of_verification", flags: ["missing_creditor_info", "date_mismatch"], notes: "Public-record signal detected. Review source, filing date, status, and verification method." },
 ];
 
-export async function parseCreditReportPdf(file: UploadedCreditReportFile, clientId: string): Promise<ParsedReportResult> {
+export async function parseCreditReportPdf(
+  file: UploadedCreditReportFile,
+  clientId: string,
+  onProgress?: AnalysisProgressCallback
+): Promise<ParsedReportResult> {
   const reportId = `report-${Date.now()}`;
+  onProgress?.({ progress: 22, message: "Opening the PDF and extracting readable report text..." });
   const extractedText = await extractReportText(file);
+  onProgress?.({ progress: 38, message: "Checking bureau headers, account sections, balances, dates, and payment-status text..." });
   const report: CreditReportFile = {
     id: reportId,
     clientId,
@@ -61,8 +74,11 @@ export async function parseCreditReportPdf(file: UploadedCreditReportFile, clien
     pages: estimatePages(file.fileSize, extractedText),
   };
 
+  onProgress?.({ progress: 52, message: "Sending extracted text to the licensed backend for deeper dispute-signal review..." });
   const apiItems = await analyzeWithBackend(reportId, extractedText, file.fileName);
+  onProgress?.({ progress: 72, message: "Cross-checking categories and recommended letter strategy for each flagged item..." });
   const items = apiItems.length ? apiItems : buildDetectedItems(reportId, extractedText, file.fileName);
+  onProgress?.({ progress: 84, message: "Scoring dispute opportunities and preparing the best-fit letter starting point..." });
   return { report, items };
 }
 

@@ -6,6 +6,19 @@ import os from "node:os";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 
+const USB_LICENSE_PATH = path.join(".credit-key", "license.dat");
+const USB_LICENSE_FILENAMES = new Set([
+  "license.dat",
+  "license.json",
+  "licens.json",
+  ".license.json",
+  ".licens.json",
+  "credit-license.json",
+  ".credit-license.json",
+]);
+const USB_LICENSE_DIRS = new Set([".credit-key", "credit-key", ".license", "license"]);
+const USB_SCAN_DEPTH = 3;
+
 const isDev = process.env.NODE_ENV === "development";
 let mainWindow: BrowserWindow | null = null;
 
@@ -70,6 +83,25 @@ ipcMain.handle("pdf:extractText", async (_event, filePath: string) => {
 
 ipcMain.handle("machine:fingerprint", async () => getMachineFingerprint());
 ipcMain.handle("machine:name", async () => `${os.hostname()} (${process.platform})`);
+ipcMain.handle("app:version", async () => ({
+  version: app.getVersion(),
+  platform: process.platform,
+}));
+ipcMain.handle("app:reload", async () => {
+  mainWindow?.webContents.reloadIgnoringCache();
+  return true;
+});
+
+ipcMain.handle("usb:scan", async () => {
+  const drives = await getRemovableDrivePaths();
+  for (const drivePath of drives) {
+    const licenseRaw = await findUsbLicenseValue(drivePath);
+    if (licenseRaw) {
+      return { found: true, licenseRaw, driveId: drivePath };
+    }
+  }
+  return { found: false, licenseRaw: null, driveId: null };
+});
 
 ipcMain.handle("secureStore:get", async (_event, key: string) => readSecureValue(key));
 ipcMain.handle("secureStore:set", async (_event, key: string, value: string) => writeSecureValue(key, value));
@@ -93,6 +125,149 @@ ipcMain.handle(
     return { ok: response.ok, status: response.status, data };
   }
 );
+
+async function getRemovableDrivePaths(): Promise<string[]> {
+  const candidates: string[] = [];
+  const platform = process.platform;
+
+  if (platform === "darwin") {
+    // macOS: /Volumes contains all mounted volumes; skip well-known system ones
+    const systemVolumes = new Set([
+      "Macintosh HD", "Macintosh HD - Data", "Recovery",
+      "Preboot", "VM", "Update", "xarts", "hardware",
+    ]);
+    try {
+      const entries = await fs.readdir("/Volumes");
+      for (const entry of entries) {
+        if (!systemVolumes.has(entry) && !entry.startsWith(".")) {
+          candidates.push(`/Volumes/${entry}`);
+        }
+      }
+    } catch { /* /Volumes inaccessible */ }
+
+  } else if (platform === "win32") {
+    // Windows: probe drive letters D–Z (A/B are floppy, C is system)
+    for (const letter of "DEFGHIJKLMNOPQRSTUVWXYZ") {
+      const drivePath = `${letter}:\\`;
+      if (existsSync(drivePath)) candidates.push(drivePath);
+    }
+
+  } else {
+    // Linux: check /media/<user>/*, /media/*, /mnt/*, /run/media/*
+    const username = os.userInfo().username;
+    const bases = [`/media/${username}`, "/media", "/mnt", "/run/media"];
+    for (const base of bases) {
+      try {
+        const entries = await fs.readdir(base);
+        for (const entry of entries) {
+          const full = path.join(base, entry);
+          try {
+            const stat = await fs.stat(full);
+            if (stat.isDirectory()) candidates.push(full);
+          } catch { /* stat failed */ }
+        }
+      } catch { /* base not present */ }
+    }
+  }
+
+  return candidates;
+}
+
+async function findUsbLicenseValue(drivePath: string): Promise<string | null> {
+  const directPaths = [
+    path.join(drivePath, USB_LICENSE_PATH),
+    path.join(drivePath, ".credit-key", "license.json"),
+    path.join(drivePath, ".credit-key", "licens.json"),
+    path.join(drivePath, "license.json"),
+    path.join(drivePath, "licens.json"),
+    path.join(drivePath, ".license.json"),
+    path.join(drivePath, ".licens.json"),
+  ];
+
+  for (const filePath of directPaths) {
+    const key = readLicenseFile(filePath);
+    if (key) return key;
+  }
+
+  return scanLicenseTree(drivePath, 0);
+}
+
+async function scanLicenseTree(dirPath: string, depth: number): Promise<string | null> {
+  if (depth > USB_SCAN_DEPTH) return null;
+  let entries: string[] = [];
+  try {
+    entries = await fs.readdir(dirPath);
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry);
+    const lower = entry.toLowerCase();
+    if (USB_LICENSE_FILENAMES.has(lower)) {
+      const key = readLicenseFile(fullPath);
+      if (key) return key;
+    }
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry);
+    const lower = entry.toLowerCase();
+    if (depth > 0 && !USB_LICENSE_DIRS.has(lower) && !lower.includes("license") && !lower.includes("licens")) {
+      continue;
+    }
+    try {
+      const stat = await fs.stat(fullPath);
+      if (!stat.isDirectory()) continue;
+      const key = await scanLicenseTree(fullPath, depth + 1);
+      if (key) return key;
+    } catch {
+      // Ignore unreadable hidden/system folders on removable media.
+    }
+  }
+
+  return null;
+}
+
+function readLicenseFile(filePath: string): string | null {
+  if (!existsSync(filePath)) return null;
+  try {
+    const raw = readFileSync(filePath, "utf8").trim();
+    if (!raw) return null;
+    if (filePath.toLowerCase().endsWith(".json")) {
+      return extractLicenseFromJson(raw);
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function extractLicenseFromJson(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return findLicenseString(parsed);
+  } catch {
+    return raw.length > 16 ? raw : null;
+  }
+}
+
+function findLicenseString(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const preferredKeys = ["licenseKey", "license_key", "key", "license", "activationKey", "activation_key"];
+  for (const key of preferredKeys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim().length > 8) return candidate.trim();
+  }
+  for (const child of Object.values(record)) {
+    if (typeof child === "object") {
+      const nested = findLicenseString(child);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
 
 function getStorageDir() {
   const dir = path.join(app.getPath("userData"), "secure-store");

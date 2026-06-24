@@ -1,17 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui";
 import { KeyIcon, ScaleIcon, CheckCircleIcon, AlertTriangleIcon } from "@/components/Icons";
 import { activateLicense } from "@/services/keygenLicenseService";
 import { useAppContext } from "@/context/AppContext";
 import { playSound } from "@/services/soundService";
+import { maskLicense, scanUsbLicense } from "@/services/usbLicenseService";
 
 export function LicenseActivationScreen() {
   const navigate = useNavigate();
   const { setLicense } = useAppContext();
   const [key, setKey] = useState("");
+  const [usbKeyPreview, setUsbKeyPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    scanUsbLicense().then((scan) => {
+      if (cancelled || !scan.found || !scan.licenseRaw) return;
+      setKey(scan.licenseRaw);
+      setUsbKeyPreview(maskLicense(scan.licenseRaw));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleActivate = async () => {
     if (!key.trim()) return;
@@ -63,6 +77,12 @@ export function LicenseActivationScreen() {
               className="w-full rounded-xl border border-white/70 bg-white/58 py-3 pl-10 pr-3.5 text-[13.5px] text-slate-700 placeholder:text-slate-400 shadow-soft focus-ring focus:border-skyGlass-400/60"
             />
           </div>
+
+          {usbKeyPreview && (
+            <div className="mt-3 rounded-xl border border-skyGlass-500/20 bg-skyGlass-500/10 px-3.5 py-2.5 text-[12.5px] text-skyGlass-700">
+              USB license detected: <span className="font-semibold">{usbKeyPreview}</span>
+            </div>
+          )}
 
           {result === "success" && (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-brand-500/10 px-3.5 py-2.5 text-[12.5px] text-brand-400">

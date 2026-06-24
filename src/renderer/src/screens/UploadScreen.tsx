@@ -11,6 +11,7 @@ import { playSound } from "@/services/soundService";
 type Stage = "idle" | "selected" | "uploading" | "analyzing" | "saving" | "done";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
+const MIN_SCAN_DURATION_MS = 3_800;
 
 export function UploadScreen() {
   const navigate = useNavigate();
@@ -85,30 +86,39 @@ export function UploadScreen() {
     playSound("click");
     setError(null);
     setStage("uploading");
-    setProgress(18);
-    setAnalysisNotes(["Securing report locally on this device..."]);
-    await delay(350);
-
-    setStage("analyzing");
-    setProgress(42);
-    setAnalysisNotes((notes) => [
-      ...notes,
-      "Running smart intelligence across bureaus, account status, balances, dates, ownership, and negative-item patterns...",
-    ]);
+    setProgress(8);
+    setAnalysisNotes(["Preparing a private local scan session..."]);
+    const scanStartedAt = Date.now();
     await delay(450);
 
+    setStage("analyzing");
+    setProgress(18);
+    setAnalysisNotes((notes) => [
+      ...notes,
+      "Reading the report slowly enough to compare bureaus, account ownership, balances, dates, statuses, and negative-item patterns...",
+    ]);
+    await delay(650);
+
     try {
-      const { report, items } = await parseCreditReportPdf(selectedFile, activeClientId);
-      setProgress(76);
+      const { report, items } = await parseCreditReportPdf(selectedFile, activeClientId, ({ progress, message }) => {
+        setProgress(progress);
+        setAnalysisNotes((notes) => appendUnique(notes, message));
+      });
+      const remainingScanTime = Math.max(0, MIN_SCAN_DURATION_MS - (Date.now() - scanStartedAt));
+      if (remainingScanTime > 0) {
+        setAnalysisNotes((notes) => appendUnique(notes, "Final review pass: checking for duplicate reporting, bureau mismatches, and missing creditor details..."));
+        await delay(remainingScanTime);
+      }
+      setProgress(88);
       setAnalysisNotes((notes) => [
         ...notes,
         `Detected ${items.length} possible negative item(s) and grouped them by dispute category.`,
-        "Matching each item to the strongest research-informed letter strategy based on category, issue signals, and market dispute patterns...",
+        "Matching each item to the strongest research-informed letter strategy based on category, issue signals, and dispute patterns...",
       ]);
-      await delay(300);
+      await delay(500);
 
       setStage("saving");
-      setProgress(90);
+      setProgress(94);
       await addReport(report);
       await addNegativeItems(items);
       setProgress(100);
@@ -284,4 +294,8 @@ function formatFileSize(bytes: number): string {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function appendUnique(notes: string[], next: string): string[] {
+  return notes.includes(next) ? notes : [...notes, next];
 }

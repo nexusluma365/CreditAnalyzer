@@ -7,9 +7,6 @@
 
 import type { Client, CreditReportFile, NegativeItem, DisputeLetter, DisputeCase } from "@/types";
 import { mockClients } from "@/data/mockClients";
-import { mockReports } from "@/data/mockReports";
-import { mockNegativeItems } from "@/data/mockNegativeItems";
-import { mockLetters, mockDisputeCases } from "@/data/mockDisputes";
 import { secureGetJson, secureRemove, secureSetJson } from "./secureStorageService";
 
 interface DatabaseSnapshot {
@@ -24,10 +21,10 @@ const STORAGE_KEY = "crap.secure.database.v3";
 
 const seed: DatabaseSnapshot = {
   clients: [...mockClients],
-  reports: [...mockReports],
-  negativeItems: [...mockNegativeItems],
-  letters: [...mockLetters],
-  disputeCases: [...mockDisputeCases],
+  reports: [],
+  negativeItems: [],
+  letters: [],
+  disputeCases: [],
 };
 
 async function readDb(): Promise<DatabaseSnapshot> {

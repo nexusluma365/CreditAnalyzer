@@ -24,7 +24,8 @@
     "package:mac": "npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
     "package:all": "npm run build && electron-builder --mac --win",
-    "typecheck": "tsc --noEmit -p src/renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.main.json && tsc --noEmit -p electron/tsconfig.preload.json"
+    "typecheck": "tsc --noEmit -p src/renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.main.json && tsc --noEmit -p electron/tsconfig.preload.json",
+    "prepare:usb": "node scripts/prepare-usb-release.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

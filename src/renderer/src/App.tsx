@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AppProvider, useAppContext } from "@/context/AppContext";
@@ -15,9 +15,12 @@ import { SettingsScreen } from "@/screens/SettingsScreen";
 import { BootScreen } from "@/screens/BootScreen";
 import { OnboardingScreen } from "@/screens/OnboardingScreen";
 import { LicenseLockoutScreen } from "@/screens/LicenseLockoutScreen";
+import { UsbLockScreen } from "@/screens/UsbLockScreen";
 import { hasCompletedOnboarding, hasCompletedOnboardingAsync } from "@/services/userProfileService";
 import { deriveLicenseState } from "@/services/licenseStateService";
+import { scanUsbLicense, validateUsbLicense } from "@/services/usbLicenseService";
 import { playSound } from "@/services/soundService";
+import { startAppUpdateHeartbeat } from "@/services/appUpdateService";
 
 export default function App() {
   return (
@@ -29,15 +32,23 @@ export default function App() {
   );
 }
 
+type UsbPhase = "checking" | "unlocked" | "locked" | "skipped";
+
+const USB_POLL_MS = 5_000;
+const USB_HEARTBEAT_MS = 60_000;
+
 /**
- * Controls the first-launch experience:
- *   boot animation -> onboarding (if never activated on this device)
- *                  -> license lockout (if a previously-activated license is
- *                     now invalid/expired/unreachable)
- *                  -> normal routed app (unchanged below)
+ * Controls the first-launch experience and USB license gating:
  *
- * This sits above HashRouter so the app routes remain untouched once the
- * gate passes.
+ *   boot animation
+ *     → USB check (parallel)
+ *         → USB found + valid  → main app (+ heartbeat every 5s/60s)
+ *         → USB found, invalid → UsbLockScreen (auto-retry every 5s)
+ *         → no USB found       → existing keyboard-license flow (unchanged)
+ *
+ * When a USB key is removed during a session the heartbeat immediately
+ * transitions to UsbLockScreen, which polls every 5 s and re-unlocks
+ * automatically when the key is reinserted.
  */
 function AppGate() {
   const { license, licenseLoaded } = useAppContext();
@@ -45,9 +56,38 @@ function AppGate() {
   const [postSignInLoading, setPostSignInLoading] = useState(false);
   const [onboarded, setOnboarded] = useState(() => hasCompletedOnboarding());
 
+  const [usbPhase, setUsbPhase] = useState<UsbPhase>("checking");
+  const [usbReason, setUsbReason] = useState<string | undefined>(undefined);
+  const [usbRequired, setUsbRequired] = useState(false);
+
+  const performUsbCheck = useCallback(async () => {
+    const scan = await scanUsbLicense();
+    if (!scan.found || !scan.licenseRaw) {
+      if (usbRequired) {
+        setUsbPhase("locked");
+        setUsbReason("Your USB key was removed. Please reinsert it to continue.");
+      } else {
+        setUsbPhase("skipped");
+      }
+      return;
+    }
+    setUsbRequired(true);
+    const result = await validateUsbLicense(scan.licenseRaw, scan.driveId);
+    if (result.valid) {
+      setUsbPhase("unlocked");
+      setUsbReason(undefined);
+    } else {
+      setUsbPhase("locked");
+      setUsbReason(result.reason);
+    }
+  }, [usbRequired]);
+
   useEffect(() => {
     playSound("open");
+    const stopUpdateHeartbeat = startAppUpdateHeartbeat();
     hasCompletedOnboardingAsync().then(setOnboarded).catch(() => setOnboarded(false));
+    performUsbCheck(); // runs concurrently with the boot animation
+    return stopUpdateHeartbeat;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -57,14 +97,64 @@ function AppGate() {
       setPostSignInLoading(false);
       setOnboarded(false);
     };
-
     window.addEventListener("cra-pro:sign-out", handleSignOut);
     return () => window.removeEventListener("cra-pro:sign-out", handleSignOut);
   }, []);
 
+  // Heartbeat while unlocked: presence check every 5 s, backend every 60 s
+  useEffect(() => {
+    if (usbPhase !== "unlocked") return;
+    let lastBackendCheck = Date.now();
+
+    const interval = setInterval(async () => {
+      const scan = await scanUsbLicense();
+      if (!scan.found || !scan.licenseRaw) {
+        setUsbPhase("locked");
+        setUsbReason("Your USB key was removed. Please reinsert it to continue.");
+        return;
+      }
+      if (Date.now() - lastBackendCheck >= USB_HEARTBEAT_MS) {
+        lastBackendCheck = Date.now();
+        const result = await validateUsbLicense(scan.licenseRaw, scan.driveId);
+        if (!result.valid) {
+          setUsbPhase("locked");
+          setUsbReason(result.reason || "License validation failed.");
+        }
+      }
+    }, USB_POLL_MS);
+
+    return () => clearInterval(interval);
+  }, [usbPhase]);
+
+  // Auto-retry every 5 s when locked — detects re-insertion automatically
+  useEffect(() => {
+    if (usbPhase !== "locked") return;
+    const interval = setInterval(performUsbCheck, USB_POLL_MS);
+    return () => clearInterval(interval);
+  }, [usbPhase, performUsbCheck]);
+
+  // ── Render logic ──────────────────────────────────────────────────────────
+
   if (booting) {
     return <BootScreen onComplete={() => setBooting(false)} />;
   }
+
+  // USB check is still in flight (normally resolves before the 2.4 s boot)
+  if (usbPhase === "checking") {
+    return <BootScreen durationMs={600} onComplete={() => {}} />;
+  }
+
+  // USB key is present but license is invalid / expired / server unreachable
+  if (usbPhase === "locked") {
+    return <UsbLockScreen reason={usbReason} />;
+  }
+
+  // USB key found and validated — go straight to the main app
+  if (usbPhase === "unlocked") {
+    return <MainAppRoutes />;
+  }
+
+  // usbPhase === "skipped" (no USB detected) → existing keyboard-license flow
 
   if (postSignInLoading) {
     return (
@@ -86,10 +176,6 @@ function AppGate() {
     );
   }
 
-  // Once onboarded, wait for the real stored/validated license before
-  // deciding whether to lock the app out — avoids briefly flashing the
-  // dashboard (or a lockout screen) based on the default "trial" state
-  // while getStoredLicense() is still resolving.
   if (!licenseLoaded) {
     return <BootScreen durationMs={600} onComplete={() => {}} />;
   }
@@ -111,6 +197,10 @@ function AppGate() {
     );
   }
 
+  return <MainAppRoutes />;
+}
+
+function MainAppRoutes() {
   return (
     <HashRouter>
       <Routes>

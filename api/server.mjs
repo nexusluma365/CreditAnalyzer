@@ -1,8 +1,16 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+
+loadLocalEnv();
 
 const APP_NAME = "Credit Report Analyzer Pro";
 const VERSION = process.env.npm_package_version ?? "0.1.0";
+const LATEST_APP_VERSION = process.env.LATEST_APP_VERSION || VERSION;
+const MAC_INSTALLER_URL = process.env.MAC_INSTALLER_URL || "";
+const WINDOWS_INSTALLER_URL = process.env.WINDOWS_INSTALLER_URL || "";
+const UPDATE_NOTES = process.env.UPDATE_NOTES || "";
+const FORCE_UPDATE = process.env.FORCE_UPDATE === "true";
 const DEPLOYMENT_COMMIT =
   process.env.RAILWAY_GIT_COMMIT_SHA ||
   process.env.GIT_COMMIT_SHA ||
@@ -27,11 +35,28 @@ const ROUTES = [
   "/",
   "/health",
   "/api/version",
+  "/api/app-update",
   "/api/license/validate",
   "/api/license/activate",
+  "/api/validate-usb-license",
   "/api/analyze-report",
   "/api/generate-letter",
 ];
+
+function loadLocalEnv(filePath = ".env.local") {
+  if (!existsSync(filePath)) return;
+  const lines = readFileSync(filePath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const rawValue = trimmed.slice(eq + 1).trim();
+    if (process.env[key] !== undefined) continue;
+    process.env[key] = rawValue.replace(/^['"]|['"]$/g, "");
+  }
+}
 
 function normalizeKeygenId(id) {
   const trimmed = String(id || "").trim();
@@ -202,6 +227,32 @@ async function createMachineForLicense({ licenseId, fingerprint, name }) {
   }
 }
 
+function maskLicenseKey(key) {
+  if (!key || typeof key !== "string") return null;
+  const parts = key.split("-");
+  if (parts.length < 2) return "****";
+  const last = parts[parts.length - 1];
+  const masked = parts.slice(0, -1).map(() => "****").join("-");
+  return `${masked}-${last}`;
+}
+
+function compareVersions(a, b) {
+  const pa = String(a || "0").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const pb = String(b || "0").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(pa.length, pb.length);
+  for (let i = 0; i < length; i += 1) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function installerUrlForPlatform(platform) {
+  if (platform === "darwin") return MAC_INSTALLER_URL || null;
+  if (platform === "win32") return WINDOWS_INSTALLER_URL || null;
+  return MAC_INSTALLER_URL || WINDOWS_INSTALLER_URL || null;
+}
+
 function localAnalysis(reportText = "", fileName = "credit-report.pdf") {
   const text = `${reportText} ${fileName}`.toLowerCase();
   const categories = [
@@ -290,6 +341,20 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/") return sendJson(req, res, 200, { name: APP_NAME, version: VERSION, status: "ok", service: "api", deploymentCommit: DEPLOYMENT_COMMIT, routes: ROUTES });
     if (req.method === "GET" && url.pathname === "/health") return sendJson(req, res, 200, { status: "ok", uptime: Number(process.uptime().toFixed(3)), timestamp: new Date().toISOString(), deploymentCommit: DEPLOYMENT_COMMIT, routes: ROUTES, env: { keygen: Boolean(KEYGEN_ACCOUNT_ID && KEYGEN_API_TOKEN && KEYGEN_PRODUCT_ID), openai: Boolean(OPENAI_API_KEY), anthropic: Boolean(ANTHROPIC_API_KEY) } });
     if (req.method === "GET" && url.pathname === "/api/version") return sendJson(req, res, 200, { name: APP_NAME, version: VERSION, node: process.version, platform: process.platform, deploymentCommit: DEPLOYMENT_COMMIT });
+    if (req.method === "GET" && url.pathname === "/api/app-update") {
+      const appVersion = String(url.searchParams.get("version") || "0.0.0");
+      const platform = String(url.searchParams.get("platform") || "");
+      return sendJson(req, res, 200, {
+        name: APP_NAME,
+        appVersion,
+        latestVersion: LATEST_APP_VERSION,
+        updateAvailable: compareVersions(LATEST_APP_VERSION, appVersion) > 0,
+        forceUpdate: FORCE_UPDATE,
+        deploymentCommit: DEPLOYMENT_COMMIT,
+        downloadUrl: installerUrlForPlatform(platform),
+        notes: UPDATE_NOTES || null,
+      });
+    }
 
     if (req.method === "POST" && url.pathname === "/api/license/validate") {
       const body = await readJson(req);
@@ -311,6 +376,25 @@ const server = createServer(async (req, res) => {
         finalResult = await validateLicenseWithKeygen({ licenseKey, fingerprint });
       }
       return sendJson(req, res, 200, { ...finalResult, activated: finalResult.valid, machine });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/validate-usb-license") {
+      const body = await readJson(req);
+      const licenseKey = String(body.licenseKey ?? "").trim();
+      const fingerprint = String(body.fingerprint ?? "").trim();
+      if (!licenseKey) {
+        return sendJson(req, res, 400, { valid: false, reason: "Missing license key.", maskedLicense: null });
+      }
+      try {
+        const result = await validateLicenseWithKeygen({ licenseKey, fingerprint });
+        const maskedLicense = maskLicenseKey(licenseKey);
+        if (result.valid) {
+          return sendJson(req, res, 200, { valid: true, reason: result.message || "License validated.", maskedLicense });
+        }
+        return sendJson(req, res, 200, { valid: false, reason: result.message || "License is not active.", maskedLicense });
+      } catch (error) {
+        return sendJson(req, res, 200, { valid: false, reason: error.message || "Validation failed.", maskedLicense: null });
+      }
     }
 
     if (req.method === "POST" && url.pathname === "/api/analyze-report") {
