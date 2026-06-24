@@ -3,17 +3,18 @@ import { buildLetterDraft } from "./letterTemplates";
 import { apiPost } from "./apiClient";
 import { getLicenseAuthPayload } from "./keygenLicenseService";
 
-export async function draftDisputeLetter(input: GenerateLetterInput): Promise<string> {
+export async function draftDisputeLetter(input: GenerateLetterInput): Promise<{ text: string; aiUsed: boolean }> {
   try {
     const auth = await getLicenseAuthPayload();
     if (!auth) throw new Error("License validation is required before AI letter generation.");
     const result = await apiPost<{ ok: boolean; letter: string }>("/api/generate-letter", { ...input, ...auth });
-    if (result?.letter) return result.letter;
+    if (result?.letter) return { text: result.letter, aiUsed: true };
   } catch {
-    // Local educational template fallback avoids crashes, but does not call OpenAI.
+    // AI unavailable — fall through to local educational template
   }
-  await delay(250);
-  return buildLetterDraft(input);
+  // Minimum visual pause so the user understands analysis occurred
+  await delay(1800);
+  return { text: buildLetterDraft(input), aiUsed: false };
 }
 
 export async function suggestDisputeReasonForItem(item: NegativeItem): Promise<string> {

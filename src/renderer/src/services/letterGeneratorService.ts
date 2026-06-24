@@ -16,22 +16,25 @@ export async function generateLetter(
   clientId: string,
   input: GenerateLetterInput,
   negativeItemId?: string
-): Promise<DisputeLetter> {
-  const bodyText = await draftDisputeLetter(input);
+): Promise<{ letter: DisputeLetter; aiUsed: boolean }> {
+  const { text: bodyText, aiUsed } = await draftDisputeLetter(input);
   const now = new Date().toISOString();
 
   return {
-    id: `letter-${Date.now()}`,
-    clientId,
-    negativeItemId,
-    letterType: input.letterType,
-    bureau: input.bureau,
-    creditorName: input.accountName,
-    accountNumberMasked: input.accountNumber,
-    title: letterTitleFor(input),
-    bodyText,
-    createdAt: now,
-    updatedAt: now,
+    letter: {
+      id: `letter-${Date.now()}`,
+      clientId,
+      negativeItemId,
+      letterType: input.letterType,
+      bureau: input.bureau,
+      creditorName: input.accountName,
+      accountNumberMasked: input.accountNumber,
+      title: letterTitleFor(input),
+      bodyText,
+      createdAt: now,
+      updatedAt: now,
+    },
+    aiUsed,
   };
 }
 

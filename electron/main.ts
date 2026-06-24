@@ -434,20 +434,67 @@ function extractTextManual(buffer: Buffer): string {
   const chunks: string[] = [];
   const raw = buffer.toString("latin1");
 
-  // Extract plain text objects.
+  // Try plain text operators in the raw (uncompressed) body first.
   chunks.push(...decodePdfTextOperators(raw));
 
-  // Extract common FlateDecode streams.
+  // Parse each content stream and try every decompression strategy.
   const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
   let match: RegExpExecArray | null;
   while ((match = streamRegex.exec(raw))) {
-    const streamBody = Buffer.from(match[1], "latin1");
-    const inflated = inflateMaybe(streamBody);
-    if (inflated) chunks.push(...decodePdfTextOperators(inflated.toString("latin1")));
+    const rawStream = match[1];
+    const streamBuf = Buffer.from(rawStream, "latin1");
+
+    // Strategy 1: plain FlateDecode (zlib / raw deflate)
+    const inflated = inflateMaybe(streamBuf);
+    if (inflated) { chunks.push(...decodePdfTextOperators(inflated.toString("latin1"))); continue; }
+
+    // Strategy 2: ASCII85Decode → FlateDecode (common in ReportLab PDFs)
+    const a85Buf = decodeAscii85(rawStream);
+    if (a85Buf) {
+      const a85Inflated = inflateMaybe(a85Buf);
+      if (a85Inflated) { chunks.push(...decodePdfTextOperators(a85Inflated.toString("latin1"))); continue; }
+      // Strategy 3: ASCII85-decoded content might already be raw operators
+      chunks.push(...decodePdfTextOperators(a85Buf.toString("latin1")));
+      continue;
+    }
+
+    // Strategy 4: try the stream bytes as raw operators (uncompressed streams)
+    chunks.push(...decodePdfTextOperators(rawStream));
   }
 
   const text = cleanExtractedText(chunks.join("\n"));
   return text.length < 40 ? "" : text.slice(0, 180000);
+}
+
+// Decode ASCII85 (Base85) encoded data. Handles both raw and <~ ~> delimited forms.
+function decodeAscii85(input: string): Buffer | null {
+  try {
+    const end = input.indexOf("~>");
+    let data = (end !== -1 ? input.slice(0, end) : input).replace(/\s/g, "");
+    if (data.startsWith("<~")) data = data.slice(2);
+    const out: number[] = [];
+    let i = 0;
+    while (i < data.length) {
+      if (data[i] === "z") { out.push(0, 0, 0, 0); i++; continue; }
+      const group = data.slice(i, i + 5);
+      const n = group.length;
+      if (n === 0) break;
+      let value = 0;
+      for (let j = 0; j < n; j++) value += (group.charCodeAt(j) - 33) * Math.pow(85, 4 - j);
+      // Pad incomplete groups so partial bytes can be extracted correctly
+      for (let j = n; j < 5; j++) value += 84 * Math.pow(85, 4 - j);
+      // Extract up to (n-1) bytes from the 4-byte group
+      const b = [
+        Math.floor(value / 16777216) & 255,
+        Math.floor(value / 65536) & 255,
+        Math.floor(value / 256) & 255,
+        value & 255,
+      ];
+      for (let k = 0; k < n - 1; k++) out.push(b[k]);
+      i += n;
+    }
+    return out.length > 0 ? Buffer.from(out) : null;
+  } catch { return null; }
 }
 
 function inflateMaybe(buf: Buffer): Buffer | null {
@@ -469,16 +516,23 @@ function trimBinaryWhitespace(buf: Buffer) {
 
 function decodePdfTextOperators(content: string): string[] {
   const out: string[] = [];
-  const literalRegex = /\((?:\\.|[^\\)])*\)\s*Tj/g;
   let match: RegExpExecArray | null;
-  while ((match = literalRegex.exec(content))) out.push(decodePdfLiteral(match[0].replace(/\s*Tj$/, "")));
 
-  const arrayRegex = /\[((?:\s*(?:\((?:\\.|[^\\)])*\)|-?\d+(?:\.\d+)?))*\s*)\]\s*TJ/g;
-  while ((match = arrayRegex.exec(content))) {
-    const inner = match[1];
-    const pieces = inner.match(/\((?:\\.|[^\\)])*\)/g) ?? [];
+  // (text) Tj — standard show string
+  const tjRegex = /\((?:\\.|[^\\)])*\)\s*Tj/g;
+  while ((match = tjRegex.exec(content))) out.push(decodePdfLiteral(match[0].replace(/\s*Tj$/, "")));
+
+  // [(text) -kern (text)] TJ — kerned show string array
+  const tjArrayRegex = /\[((?:\s*(?:\((?:\\.|[^\\)])*\)|-?\d+(?:\.\d+)?))*\s*)\]\s*TJ/g;
+  while ((match = tjArrayRegex.exec(content))) {
+    const pieces = match[1].match(/\((?:\\.|[^\\)])*\)/g) ?? [];
     if (pieces.length) out.push(pieces.map(decodePdfLiteral).join(""));
   }
+
+  // (text) ' — move to next line and show (shorthand)
+  const apostropheRegex = /\((?:\\.|[^\\)])*\)\s*'/g;
+  while ((match = apostropheRegex.exec(content))) out.push(decodePdfLiteral(match[0].replace(/\s*'$/, "")));
+
   return out;
 }
 

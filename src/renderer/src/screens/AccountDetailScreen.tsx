@@ -17,6 +17,14 @@ import { generateLetter, exportLetterAsPdf } from "@/services/letterGeneratorSer
 import { useAppContext } from "@/context/AppContext";
 import type { DisputeLetter, GenerateLetterInput, NegativeItem } from "@/types";
 
+const GENERATION_STEPS = [
+  "Reviewing account details and dispute category...",
+  "Identifying applicable FCRA and FDCPA provisions...",
+  "Researching strongest legal arguments for this dispute...",
+  "Cross-referencing bureau reporting inconsistencies...",
+  "Drafting your personalized dispute letter...",
+];
+
 export function AccountDetailScreen() {
   const { itemId } = useParams<{ itemId: string }>();
   const navigate = useNavigate();
@@ -25,6 +33,8 @@ export function AccountDetailScreen() {
   const [suggestion, setSuggestion] = useState<string>("");
   const [letter, setLetter] = useState<DisputeLetter | null>(null);
   const [letterState, setLetterState] = useState<"idle" | "generating" | "ready" | "downloaded">("idle");
+  const [generationStep, setGenerationStep] = useState(0);
+  const [aiUsed, setAiUsed] = useState<boolean | null>(null);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -158,14 +168,25 @@ export function AccountDetailScreen() {
 
       {letterState === "generating" && (
         <Card glow>
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-white/50 py-14 text-center shadow-soft">
+          <div className="flex flex-col items-center justify-center rounded-2xl bg-white/50 py-12 text-center shadow-soft">
             <UiverseCloudLoader />
-            <p className="mt-4 text-[13px] font-semibold text-slate-600">
-              Writing your recommended dispute letter...
+            <p className="mt-5 text-[13.5px] font-semibold text-slate-700">
+              Luma Intelligence is researching your dispute...
             </p>
-            <p className="mt-1 text-[12px] text-slate-500">
-              Using the selected negative item, bureau, issue flags, and suggested dispute reason.
+            <p className="mt-2 min-h-[18px] text-[12.5px] text-accentBlue-500 transition-all duration-500">
+              {GENERATION_STEPS[generationStep]}
             </p>
+            <div className="mt-4 flex gap-1.5">
+              {GENERATION_STEPS.map((_, i) => (
+                <div
+                  key={i}
+                  className={[
+                    "h-1 w-6 rounded-full transition-all duration-500",
+                    i <= generationStep ? "bg-brand-400" : "bg-slate-200",
+                  ].join(" ")}
+                />
+              ))}
+            </div>
           </div>
         </Card>
       )}
@@ -178,9 +199,21 @@ export function AccountDetailScreen() {
               <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Dispute Letter</p>
               <h3 className="mt-0.5 text-[14px] font-bold text-slate-700">{letter.title}</h3>
             </div>
-            <Badge tone="brand">
-              <CheckCircleIcon size={12} /> Ready
-            </Badge>
+            <div className="flex items-center gap-2">
+              {aiUsed === true && (
+                <Badge tone="blue">
+                  <SparklesIcon size={11} /> AI‑researched
+                </Badge>
+              )}
+              {aiUsed === false && (
+                <Badge tone="brand">
+                  Template draft
+                </Badge>
+              )}
+              <Badge tone="brand">
+                <CheckCircleIcon size={12} /> Ready
+              </Badge>
+            </div>
           </div>
 
           {/* Scrollable letter body */}
@@ -216,7 +249,17 @@ export function AccountDetailScreen() {
   async function handleCreateLetter() {
     if (!item || letterState === "generating") return;
     setLetterState("generating");
+    setGenerationStep(0);
+    setAiUsed(null);
     setDownloadMessage(null);
+
+    // Advance step indicator every ~1.1 s while the AI works
+    let step = 0;
+    const stepTimer = setInterval(() => {
+      step = Math.min(step + 1, GENERATION_STEPS.length - 1);
+      setGenerationStep(step);
+    }, 1100);
+
     const input: GenerateLetterInput = {
       consumerName: profile?.fullName ?? activeClient?.fullName ?? "Consumer",
       bureau: item.bureausReporting[0] ?? "Experian",
@@ -228,9 +271,13 @@ export function AccountDetailScreen() {
       category: item.category,
       letterType: item.recommendedLetterType,
     };
-    const generated = await generateLetter(activeClientId, input, item.id);
+
+    const { letter: generated, aiUsed: wasAI } = await generateLetter(activeClientId, input, item.id);
+    clearInterval(stepTimer);
+    setGenerationStep(GENERATION_STEPS.length - 1);
     await saveLetter(generated);
     setLetter(generated);
+    setAiUsed(wasAI);
     setLetterState("ready");
   }
 

@@ -49,21 +49,21 @@ export function LetterGeneratorScreen() {
   const handleGenerate = async () => {
     setGenerating(true);
     setSaveState("idle");
-    const letter = await generateLetter(activeClientId, form, prefillItem?.id);
+    const { letter } = await generateLetter(activeClientId, form, prefillItem?.id);
     setCurrentLetter(letter);
     setDraft(letter.bodyText);
     setGenerating(false);
   };
 
   const handleSave = async () => {
-    const letter = currentLetter ?? (await generateLetter(activeClientId, form, prefillItem?.id));
+    const letter = currentLetter ?? (await generateLetter(activeClientId, form, prefillItem?.id)).letter;
     await saveLetter({ ...letter, bodyText: draft, updatedAt: new Date().toISOString() });
     setSaveState("saved");
     setTimeout(() => setSaveState("idle"), 2000);
   };
 
   const handleExport = async (format: "pdf" | "docx") => {
-    const letter = currentLetter ?? (await generateLetter(activeClientId, form, prefillItem?.id));
+    const letter = currentLetter ?? (await generateLetter(activeClientId, form, prefillItem?.id)).letter;
     const finalLetter = { ...letter, bodyText: draft, updatedAt: new Date().toISOString() };
     const result =
       format === "pdf" ? await exportLetterAsPdf(finalLetter) : await exportLetterAsDocx(finalLetter);
