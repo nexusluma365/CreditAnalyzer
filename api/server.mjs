@@ -561,8 +561,29 @@ function fallbackLetter(input) {
   return `${input.consumerName || "Consumer Name"}\n${today}\n\n${input.bureau || "Credit Bureau"}\n\nRe: ${input.accountName || "Account"} ${input.accountNumber ? `(${input.accountNumber})` : ""}\n\nTo Whom It May Concern,\n\nI am writing to request an investigation of the account listed above. Based on my review, I believe this item may contain inaccurate, incomplete, or unverifiable information. The specific issue I would like reviewed is:\n\n${input.disputeReason || "Please verify the accuracy, completeness, ownership, balance, dates, and reporting of this account."}\n\nPlease investigate this matter and provide the results of your investigation in writing. If the information cannot be verified as accurate and complete, please update or remove the item as required by applicable credit reporting rules.\n\nThis letter is an educational draft and does not claim a guaranteed outcome.\n\nSincerely,\n${input.consumerName || "Consumer Name"}`;
 }
 
+const LETTER_TYPE_CONTEXTS = {
+  "609_investigation": "FCRA §609 investigation request — consumer is requesting all documents the bureau used to create or verify this account. Legal basis: 15 U.S.C. § 1681g.",
+  "collection_dispute": "FCRA §611 bureau dispute — challenging accuracy, completeness, or verifiability of a collection account. Legal basis: 15 U.S.C. § 1681i.",
+  "charge_off_dispute": "FCRA §623 charge-off accuracy dispute — challenging balance, date, status, or double-reporting of a charged-off account. Legal basis: 15 U.S.C. § 1681s-2.",
+  "method_of_verification": "FCRA §611(a)(7) escalation — requesting the specific method used to verify a previously disputed item after the bureau said 'verified'. Legal basis: 15 U.S.C. § 1681i(a)(7).",
+  "debt_validation": "FDCPA §809(b) — consumer requesting validation of debt from the collection agency. This letter goes to the collector, NOT the bureau. Legal basis: 15 U.S.C. § 1692g.",
+  "creditor_direct": "FCRA §623 direct creditor dispute — disputing inaccurate information directly with the original creditor who furnished it. Legal basis: 15 U.S.C. § 1681s-2(a)(8).",
+  "paid_collection": "Paid collection status update — requesting the bureau/collector update the account status to reflect that this collection has been paid or settled.",
+  "hard_inquiry_removal": "FCRA §604 unauthorized inquiry — disputing a hard inquiry the consumer never authorized. Legal basis: 15 U.S.C. § 1681b.",
+  "goodwill_letter": "Goodwill adjustment — respectful appeal to the original creditor to remove a late payment notation as a courtesy. Not a legal claim — a goodwill request based on positive account history.",
+  "repossession_dispute": "Repossession dispute — challenging the accuracy of the deficiency balance, repo date, or sale proceeds credited. References UCC Article 9 required notices.",
+  "medical_collection": "Medical collection dispute — citing CFPB 2024 medical debt rules and HIPAA protections. Requesting validation of the debt and insurance adjudication records.",
+  "bankruptcy_dispute": "Bankruptcy accuracy dispute — ensuring accounts are properly marked as discharged, dismissed, or correctly dated within FCRA §605 reporting periods.",
+  "identity_theft": "FCRA §605B identity theft block — requesting immediate blocking of fraudulent account. 4-business-day block requirement. References FTC Identity Theft Report.",
+  "outdated_account": "FCRA §605 obsolescence — requesting removal of an account that has exceeded the 7-year reporting period from date of first delinquency.",
+  "duplicate_account": "Duplicate account removal — disputing the same account appearing twice creating a double-negative impact on the credit profile.",
+  "escalation_letter": "Escalation letter — referencing prior unresolved dispute, noting intent to file CFPB/FTC complaint, citing FCRA §616 willful noncompliance risk.",
+};
+
 async function generateLetterWithOpenAI(input) {
   if (!OPENAI_API_KEY) return fallbackLetter(input);
+  const letterType = String(input.letterType || "collection_dispute");
+  const letterContext = LETTER_TYPE_CONTEXTS[letterType] || "General credit dispute letter — request investigation of inaccurate or unverifiable information on the credit report.";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
@@ -570,8 +591,14 @@ async function generateLetterWithOpenAI(input) {
       model: process.env.OPENAI_MODEL || "gpt-4o-mini",
       temperature: 0.35,
       messages: [
-        { role: "system", content: "Draft educational credit dispute letters. Do not guarantee removal, approvals, or score increases. Use professional, plain language." },
-        { role: "user", content: `Create a dispute letter draft with these details: ${JSON.stringify(input)}` },
+        {
+          role: "system",
+          content: "You are a professional credit dispute letter writer. Write complete, professional dispute letters using the consumer's actual information. Cite relevant law. Frame all advice as educational suggestions — never guarantee outcomes, deletions, score changes, or approvals. Use plain, confident, professional language.",
+        },
+        {
+          role: "user",
+          content: `Write a ${letterType} letter using these details:\nConsumer: ${input.consumerName || "Consumer"}\nAccount: ${input.accountName || "Account"} (${input.accountNumber || "—"})\nBureau: ${input.bureau || "Credit Bureau"}\nDispute reason: ${input.disputeReason || "Inaccurate or unverifiable information"}\nCategory: ${input.category || "—"}\nLetter strategy context: ${letterContext}\n\nWrite a complete letter including date, bureau address (or collector address if this is a debt_validation or creditor_direct letter), salutation, 2-3 paragraph body with appropriate FCRA/FDCPA citations, specific request for investigation/removal/validation, 30-day response reminder, and signature block. End with: "Note: This is an educational draft template suggested by Luma Intelligence. Review all details and consult a consumer attorney for legal guidance. Outcomes vary and are not guaranteed."`,
+        },
       ],
     }),
   });

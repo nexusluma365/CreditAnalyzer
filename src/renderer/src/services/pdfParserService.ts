@@ -46,11 +46,11 @@ const CATEGORY_BANK: Array<{
   notes: string;
 }> = [
   { category: "collections", label: "Collections", terms: ["collection", "collector", "midland", "portfolio recovery", "lvnv", "resurgent", "collection agency"], names: ["Midland Credit Management", "Portfolio Recovery Associates", "LVNV Funding", "Resurgent Capital Services"], letter: "debt_validation", flags: ["unknown_account", "wrong_balance", "missing_creditor_info"], notes: "Collection account signal detected. Review ownership, balance, dates, and collector details before choosing a dispute path." },
-  { category: "charge_offs", label: "Charge-Offs", terms: ["charge off", "charged off", "charge-off", "written off", "profit and loss"], names: ["Capital One Bank", "Credit One Bank", "Synchrony Bank", "First Premier Bank"], letter: "collection_dispute", flags: ["wrong_balance", "date_mismatch", "bureau_mismatch"], notes: "Charge-off signal detected. Compare charge-off date, reported balance, payment history, and bureau-level reporting." },
-  { category: "repossessions", label: "Repossessions", terms: ["repo", "repossession", "auto loan", "deficiency", "santander", "ally financial"], names: ["Santander Consumer USA", "Credit Acceptance", "Ally Financial", "Westlake Financial"], letter: "collection_dispute", flags: ["wrong_balance", "date_mismatch", "missing_creditor_info"], notes: "Auto/repo signal detected. Review deficiency balance, sale amount, repossession date, and reporting consistency." },
+  { category: "charge_offs", label: "Charge-Offs", terms: ["charge off", "charged off", "charge-off", "written off", "profit and loss"], names: ["Capital One Bank", "Credit One Bank", "Synchrony Bank", "First Premier Bank"], letter: "charge_off_dispute", flags: ["wrong_balance", "date_mismatch", "bureau_mismatch"], notes: "Charge-off signal detected. Compare charge-off date, reported balance, payment history, and bureau-level reporting." },
+  { category: "repossessions", label: "Repossessions", terms: ["repo", "repossession", "auto loan", "deficiency", "santander", "ally financial"], names: ["Santander Consumer USA", "Credit Acceptance", "Ally Financial", "Westlake Financial"], letter: "repossession_dispute", flags: ["wrong_balance", "date_mismatch", "missing_creditor_info"], notes: "Auto/repo signal detected. Review deficiency balance, sale amount, repossession date, and reporting consistency." },
   { category: "hard_inquiries", label: "Hard Inquiries", terms: ["hard inquiry", "inquiry", "inquiries", "permissible purpose", "hard pull"], names: ["Capital One Auto Finance", "Discover Bank", "Chase Card Services", "American Express"], letter: "hard_inquiry_removal", flags: ["unknown_account", "bureau_mismatch"], notes: "Hard inquiry signal detected. Review whether the inquiry was authorized and properly reported." },
   { category: "late_payments", label: "Late Payments", terms: ["30 days late", "60 days late", "90 days late", "late payment", "past due", "delinquent"], names: ["Navy Federal Credit Union", "Bank of America", "Wells Fargo", "PenFed Credit Union"], letter: "goodwill_letter", flags: ["date_mismatch", "bureau_mismatch"], notes: "Late-payment signal detected. Review the payment history grid and compare bureaus before drafting correspondence." },
-  { category: "medical_collections", label: "Medical Collections", terms: ["medical", "hospital", "clinic", "healthcare", "patient", "insurance"], names: ["CMRE Financial Services", "Receivables Performance", "Medical Data Systems", "ARS Account Resolution"], letter: "debt_validation", flags: ["wrong_balance", "missing_creditor_info", "unknown_account"], notes: "Medical collection signal detected. Review insurance/payment records and collector information." },
+  { category: "medical_collections", label: "Medical Collections", terms: ["medical", "hospital", "clinic", "healthcare", "patient", "insurance"], names: ["CMRE Financial Services", "Receivables Performance", "Medical Data Systems", "ARS Account Resolution"], letter: "medical_collection", flags: ["wrong_balance", "missing_creditor_info", "unknown_account"], notes: "Medical collection signal detected. Review insurance/payment records and collector information." },
   { category: "student_loans", label: "Student Loans", terms: ["student loan", "nelnet", "mohela", "aidvantage", "department of education", "fedloan"], names: ["Nelnet", "MOHELA", "Aidvantage", "Department of Education"], letter: "collection_dispute", flags: ["date_mismatch", "bureau_mismatch"], notes: "Student-loan signal detected. Review servicer, status, payment history, and deferment/forbearance notes." },
   { category: "public_records", label: "Public Records", terms: ["bankruptcy", "public record", "court", "judgment", "lien", "lexisnexis"], names: ["LexisNexis Risk Solutions", "County Court Record", "Bankruptcy Court", "Public Record Vendor"], letter: "method_of_verification", flags: ["missing_creditor_info", "date_mismatch"], notes: "Public-record signal detected. Review source, filing date, status, and verification method." },
 ];
@@ -305,6 +305,23 @@ function sanitizeFlags(value: unknown, fallback: AccountIssueFlag[]): AccountIss
 }
 
 function sanitizeLetterType(value: unknown, fallback: DisputeLetterType): DisputeLetterType {
-  const allowed: DisputeLetterType[] = ["collection_dispute", "debt_validation", "method_of_verification", "hard_inquiry_removal", "goodwill_letter", "escalation_letter"];
+  const allowed: DisputeLetterType[] = [
+    "609_investigation",
+    "collection_dispute",
+    "charge_off_dispute",
+    "method_of_verification",
+    "debt_validation",
+    "creditor_direct",
+    "paid_collection",
+    "hard_inquiry_removal",
+    "goodwill_letter",
+    "repossession_dispute",
+    "medical_collection",
+    "bankruptcy_dispute",
+    "identity_theft",
+    "outdated_account",
+    "duplicate_account",
+    "escalation_letter",
+  ];
   return typeof value === "string" && allowed.includes(value as DisputeLetterType) ? (value as DisputeLetterType) : fallback;
 }

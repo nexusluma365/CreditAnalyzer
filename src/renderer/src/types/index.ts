@@ -44,20 +44,44 @@ export const ISSUE_FLAG_LABELS: Record<AccountIssueFlag, string> = {
 };
 
 export type DisputeLetterType =
-  | "collection_dispute"
-  | "debt_validation"
-  | "method_of_verification"
-  | "hard_inquiry_removal"
-  | "goodwill_letter"
-  | "escalation_letter";
+  // ── Bureau investigation letters ─────────────────────────────
+  | "609_investigation"          // FCRA §609 — request all documents bureau holds
+  | "collection_dispute"         // General collection account dispute to bureau
+  | "charge_off_dispute"         // Charge-off accuracy challenge to bureau
+  | "method_of_verification"     // FCRA §611(a)(7) — how was this verified?
+  // ── Sent to collector / furnisher ────────────────────────────
+  | "debt_validation"            // FDCPA §809(b) — validate the debt
+  | "creditor_direct"            // FCRA §623 — direct dispute to original creditor
+  | "paid_collection"            // Request status update: paid/settled collection
+  // ── Situation-specific bureau letters ────────────────────────
+  | "hard_inquiry_removal"       // Unauthorized inquiry removal
+  | "goodwill_letter"            // Goodwill late-payment removal (to creditor)
+  | "repossession_dispute"       // Repo deficiency / balance inaccuracy
+  | "medical_collection"         // Medical debt dispute (CFPB 2023 rules)
+  | "bankruptcy_dispute"         // Bankruptcy reporting accuracy
+  | "identity_theft"             // Fraudulent / unauthorized account
+  | "outdated_account"           // FCRA §605 7-year obsolescence removal
+  | "duplicate_account"          // Duplicate account reporting removal
+  // ── Follow-up / escalation ───────────────────────────────────
+  | "escalation_letter";         // Escalation after failed reinvestigation
 
 export const LETTER_TYPE_LABELS: Record<DisputeLetterType, string> = {
-  collection_dispute: "Collection Dispute",
-  debt_validation: "Debt Validation Request",
-  method_of_verification: "Method of Verification Request",
-  hard_inquiry_removal: "Hard Inquiry Removal Request",
-  goodwill_letter: "Goodwill Adjustment Request",
-  escalation_letter: "Escalation Letter",
+  "609_investigation":       "§609 Investigation Request",
+  collection_dispute:        "Collection Account Dispute",
+  charge_off_dispute:        "Charge-Off Accuracy Dispute",
+  method_of_verification:    "Method of Verification Request",
+  debt_validation:           "Debt Validation Request (FDCPA)",
+  creditor_direct:           "Direct Creditor Dispute (§623)",
+  paid_collection:           "Paid Collection Status Update",
+  hard_inquiry_removal:      "Unauthorized Inquiry Removal",
+  goodwill_letter:           "Goodwill Adjustment Request",
+  repossession_dispute:      "Repossession Dispute",
+  medical_collection:        "Medical Collection Dispute",
+  bankruptcy_dispute:        "Bankruptcy Reporting Dispute",
+  identity_theft:            "Identity Theft / Fraud Block",
+  outdated_account:          "Outdated Account Removal (§605)",
+  duplicate_account:         "Duplicate Account Removal",
+  escalation_letter:         "Escalation & Re-Investigation",
 };
 
 export type DisputeStatus = "Pending" | "Sent" | "Verified" | "Removed" | "Escalated";
