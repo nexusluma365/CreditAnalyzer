@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, Badge, Button, ProgressBar, DonutWheel } from "@/components/ui";
 import {
@@ -54,8 +54,74 @@ export function DashboardScreen() {
   const licenseBadge = LICENSE_BADGE[license.status] ?? LICENSE_BADGE.inactive;
   const firstName = profile?.fullName?.split(" ")[0];
 
+  // Welcome prompt — shown once per session when no reports exist
+  const [showWelcome, setShowWelcome] = useState(false);
+  const welcomeChecked = useRef(false);
+  useEffect(() => {
+    if (welcomeChecked.current) return;
+    welcomeChecked.current = true;
+    if (!sessionStorage.getItem("cra-welcome-shown")) {
+      setShowWelcome(true);
+    }
+  }, []);
+  // Hide once a report is uploaded
+  useEffect(() => { if (reports.length > 0) setShowWelcome(false); }, [reports.length]);
+  const dismissWelcome = () => {
+    sessionStorage.setItem("cra-welcome-shown", "1");
+    setShowWelcome(false);
+  };
+  const goUpload = () => { dismissWelcome(); navigate("/upload"); };
+
+  // Live Luma insight — computed from actual negative items
+  const lumaInsight = buildLumaInsight(negativeItems, categoryCounts);
+
   return (
-    <div className="space-y-5 lg:space-y-6">
+    <div className="relative space-y-5 lg:space-y-6">
+
+      {/* ── Welcome prompt ─────────────────────────────────────────────── */}
+      {showWelcome && reports.length === 0 && (
+        <div className="animate-scale-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-[6px]">
+          <div className="animate-fade-in-up relative mx-4 w-full max-w-md glass-panel-strong rounded-3xl p-8 shadow-glowLg text-center"
+               style={{ animationDelay: "60ms" }}>
+            {/* Glow orbs */}
+            <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-skyGlass-400/20 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-accentBlue-400/15 blur-3xl" />
+
+            <div className="relative">
+              {/* Icon */}
+              <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-skyGlass-500 to-accentBlue-500 shadow-glowLg">
+                <span className="absolute inline-flex h-16 w-16 animate-ping rounded-2xl bg-skyGlass-400 opacity-20" />
+                <UploadIcon size={28} className="relative text-white" />
+              </div>
+
+              <h2 className="text-[22px] font-bold leading-tight text-slate-700">
+                Upload Your Credit Report
+              </h2>
+              <p className="mt-0.5 text-[22px] font-bold leading-tight text-skyGlass-700">
+                To Get Started
+              </p>
+
+              <p className="mt-4 text-[13px] leading-relaxed text-slate-500">
+                Luma Intelligence will scan your PDF, identify negative items, and map the best dispute letter strategy for each one.
+              </p>
+
+              <button
+                onClick={goUpload}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-skyGlass-500 to-accentBlue-500 py-3.5 text-[14px] font-bold text-white shadow-glowLg transition-smooth hover:opacity-90 active:scale-[0.98]"
+              >
+                <UploadIcon size={17} /> Upload Credit Report
+              </button>
+
+              <button
+                onClick={dismissWelcome}
+                className="mt-3.5 text-[12px] text-slate-400 transition-smooth hover:text-slate-600"
+              >
+                Explore dashboard first
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Welcome header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -280,10 +346,7 @@ export function DashboardScreen() {
           </div>
           <div className="flex-1">
             <p className="text-[13.5px] font-semibold text-slate-700">Luma Intelligence quick insight</p>
-            <p className="mt-0.5 text-[12.5px] text-slate-500">
-              2 hard inquiries and 1 medical collection show a higher research-informed dispute-priority
-              signal this week — Luma recommends reviewing these first.
-            </p>
+            <p className="mt-0.5 text-[12.5px] text-slate-500">{lumaInsight}</p>
           </div>
           <Button variant="secondary" size="sm" onClick={() => navigate("/categories")}>
             Review items
@@ -292,6 +355,34 @@ export function DashboardScreen() {
       </Card>
     </div>
   );
+}
+
+function buildLumaInsight(
+  items: import("@/types").NegativeItem[],
+  counts: Record<string, number>
+): string {
+  if (items.length === 0) {
+    return "Upload a credit report — Luma Intelligence will analyze negative items and prioritize your highest-impact dispute opportunities.";
+  }
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const topCategory = sorted[0];
+  const secondCategory = sorted[1];
+
+  const topLabel = CATEGORY_LABELS[topCategory[0] as keyof typeof CATEGORY_LABELS] ?? topCategory[0];
+  const highScore = items.filter((i) => i.disputeOpportunityScore >= 7);
+  const highScoreCount = highScore.length;
+
+  if (highScoreCount > 0 && secondCategory) {
+    const secondLabel = CATEGORY_LABELS[secondCategory[0] as keyof typeof CATEGORY_LABELS] ?? secondCategory[0];
+    return `${topCategory[1]} ${topLabel.toLowerCase()} item${topCategory[1] !== 1 ? "s" : ""} and ${secondCategory[1]} ${secondLabel.toLowerCase()} account${secondCategory[1] !== 1 ? "s" : ""} — ${highScoreCount} item${highScoreCount !== 1 ? "s" : ""} scored 7+ for dispute priority. Luma recommends starting there.`;
+  }
+
+  if (highScoreCount > 0) {
+    return `${items.length} negative item${items.length !== 1 ? "s" : ""} found across ${sorted.length} ${sorted.length !== 1 ? "categories" : "category"} — ${highScoreCount} flagged as high-priority by Luma Intelligence. Review these first for the fastest credit impact.`;
+  }
+
+  return `${items.length} negative item${items.length !== 1 ? "s" : ""} found, led by ${topCategory[1]} ${topLabel.toLowerCase()} account${topCategory[1] !== 1 ? "s" : ""}. Luma recommends reviewing each for possible inaccuracies before sending dispute letters.`;
 }
 
 function StatusDot({ status }: { status: string }) {

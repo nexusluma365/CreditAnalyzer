@@ -77,10 +77,11 @@ export function AccountDetailScreen() {
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <DetailField label="Balance" value={item.balance ? `$${item.balance.toLocaleString()}` : "—"} />
+          <DetailField label="Balance" value={item.balance ? `-$${item.balance.toLocaleString()}` : "—"} negative={!!item.balance} />
           <DetailField
             label="Original amount"
-            value={item.originalAmount ? `$${item.originalAmount.toLocaleString()}` : "—"}
+            value={item.originalAmount ? `-$${item.originalAmount.toLocaleString()}` : "—"}
+            negative={!!item.originalAmount}
           />
           <DetailField label="Date opened" value={item.dateOpened ?? "—"} />
           <DetailField label="Date reported" value={item.dateReported ?? "—"} />
@@ -236,11 +237,13 @@ export function AccountDetailScreen() {
   }
 }
 
-function DetailField({ label, value }: { label: string; value: string }) {
+function DetailField({ label, value, negative }: { label: string; value: string; negative?: boolean }) {
   return (
     <div>
       <p className="text-[11px] font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-[13.5px] font-semibold text-slate-700">{value}</p>
+      <p className={["mt-1 text-[13.5px] font-semibold", negative ? "text-danger-400" : "text-slate-700"].join(" ")}>
+        {value}
+      </p>
     </div>
   );
 }

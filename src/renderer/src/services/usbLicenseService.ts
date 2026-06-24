@@ -16,6 +16,8 @@ export interface UsbValidationResult {
   reason: string;
   maskedLicense: string | null;
   offlineGrace?: boolean;
+  userName?: string | null;
+  userEmail?: string | null;
 }
 
 interface StoredUsbValidation {

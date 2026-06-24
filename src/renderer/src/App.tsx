@@ -16,7 +16,7 @@ import { BootScreen } from "@/screens/BootScreen";
 import { OnboardingScreen } from "@/screens/OnboardingScreen";
 import { LicenseLockoutScreen } from "@/screens/LicenseLockoutScreen";
 import { UsbLockScreen } from "@/screens/UsbLockScreen";
-import { hasCompletedOnboarding, hasCompletedOnboardingAsync } from "@/services/userProfileService";
+import { hasCompletedOnboarding, hasCompletedOnboardingAsync, saveProfile, markOnboardingComplete } from "@/services/userProfileService";
 import { deriveLicenseState } from "@/services/licenseStateService";
 import { scanUsbLicense, validateUsbLicense } from "@/services/usbLicenseService";
 import { playSound } from "@/services/soundService";
@@ -51,7 +51,7 @@ const USB_HEARTBEAT_MS = 60_000;
  * automatically when the key is reinserted.
  */
 function AppGate() {
-  const { license, licenseLoaded } = useAppContext();
+  const { license, licenseLoaded, setProfile } = useAppContext();
   const [booting, setBooting] = useState(true);
   const [postSignInLoading, setPostSignInLoading] = useState(false);
   const [onboarded, setOnboarded] = useState(() => hasCompletedOnboarding());
@@ -78,11 +78,20 @@ function AppGate() {
     if (result.valid) {
       setUsbPhase("unlocked");
       setUsbReason(undefined);
+      // Auto-save license holder profile from Keygen so the app shows real name/email
+      if (result.userName || result.userEmail) {
+        const saved = await saveProfile({
+          fullName: result.userName ?? "License Holder",
+          email: result.userEmail ?? "",
+        });
+        setProfile(saved);
+      }
+      await markOnboardingComplete();
     } else {
       setUsbPhase("locked");
       setUsbReason(result.reason);
     }
-  }, [usbRequired]);
+  }, [usbRequired, setProfile]);
 
   useEffect(() => {
     playSound("open");
@@ -147,13 +156,21 @@ function AppGate() {
       if (result.valid) {
         setUsbPhase("unlocked");
         setUsbReason(undefined);
+        if (result.userName || result.userEmail) {
+          const saved = await saveProfile({
+            fullName: result.userName ?? "License Holder",
+            email: result.userEmail ?? "",
+          });
+          setProfile(saved);
+        }
+        await markOnboardingComplete();
       } else {
         setUsbPhase("locked");
         setUsbReason(result.reason);
       }
     }, USB_POLL_MS);
     return () => clearInterval(interval);
-  }, [usbPhase]);
+  }, [usbPhase, setProfile]);
 
   // ── Render logic ──────────────────────────────────────────────────────────
 

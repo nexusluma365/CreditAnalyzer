@@ -227,6 +227,24 @@ async function createMachineForLicense({ licenseId, fingerprint, name }) {
   }
 }
 
+async function getLicenseHolderInfo(licenseId) {
+  if (!licenseId) return { userName: null, userEmail: null };
+  try {
+    const data = await keygenRequest(`/licenses/${licenseId}?include=user`);
+    const included = data?.included ?? [];
+    const user = included.find((i) => i.type === "users");
+    if (user) {
+      const a = user.attributes ?? {};
+      const fullName = [a.firstName, a.lastName].filter(Boolean).join(" ") || a.name || null;
+      return { userName: fullName || null, userEmail: a.email || null };
+    }
+    const licenseAttrs = data?.data?.attributes ?? {};
+    return { userName: licenseAttrs.name || null, userEmail: null };
+  } catch {
+    return { userName: null, userEmail: null };
+  }
+}
+
 function maskLicenseKey(key) {
   if (!key || typeof key !== "string") return null;
   const parts = key.split("-");
@@ -386,11 +404,17 @@ const server = createServer(async (req, res) => {
       }
       try {
         // USB dongle is the authentication factor — do not scope by machine fingerprint.
-        // The physical key being present is sufficient; fingerprint binding is for keyboard licenses.
         const result = await validateLicenseWithKeygen({ licenseKey, fingerprint: "" });
         const maskedLicense = maskLicenseKey(licenseKey);
         if (result.valid) {
-          return sendJson(req, res, 200, { valid: true, reason: result.message || "License validated.", maskedLicense });
+          const holderInfo = await getLicenseHolderInfo(result.licenseId);
+          return sendJson(req, res, 200, {
+            valid: true,
+            reason: result.message || "License validated.",
+            maskedLicense,
+            userName: holderInfo.userName,
+            userEmail: holderInfo.userEmail,
+          });
         }
         return sendJson(req, res, 200, { valid: false, reason: result.message || "License is not active.", maskedLicense });
       } catch (error) {
