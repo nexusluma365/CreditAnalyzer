@@ -1,17 +1,20 @@
 import { useState, type ReactNode } from "react";
 import { Card, CardHeader, Badge, Button } from "@/components/ui";
-import { MailIcon, KeyIcon, UserDetailIcon, SparklesIcon, PhoneIcon, HomeIcon, EditIcon, CheckCircleIcon } from "@/components/Icons";
+import { MailIcon, KeyIcon, UserDetailIcon, SparklesIcon, PhoneIcon, HomeIcon, EditIcon, CheckCircleIcon, TrashIcon } from "@/components/Icons";
 import { useAppContext } from "@/context/AppContext";
 import { clearProfile, resetOnboarding, saveProfile } from "@/services/userProfileService";
 import { deactivateLicense } from "@/services/keygenLicenseService";
+import { resetLocalDatabase } from "@/services/databaseService";
+import { forgetUsbValidation } from "@/services/usbLicenseService";
 import { playSound } from "@/services/soundService";
 
 const SUPPORT_EMAIL = "support@creditreportanalyzerpro.com";
 
 export function SettingsScreen() {
-  const { profile, activeClient, license, setLicense, setProfile } = useAppContext();
+  const { profile, activeClient, license, setLicense, setProfile, refreshClients } = useAppContext();
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const [fullName, setFullName] = useState(profile?.fullName ?? "");
   const [email, setEmail] = useState(profile?.email ?? "");
@@ -120,6 +123,20 @@ export function SettingsScreen() {
       <Card>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <h3 className="text-[14px] font-bold text-slate-700">Start over</h3>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">
+              Clear all local app data, including saved reports, letters, dispute cases, profile, license, and USB validation cache.
+            </p>
+          </div>
+          <Button variant="danger" onClick={handleClearAllData} disabled={clearingAll} icon={<TrashIcon size={15} />}>
+            {clearingAll ? "Clearing..." : "Clear All"}
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
             <h3 className="text-[14px] font-bold text-slate-700">Sign out</h3>
             <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">
               This clears the local account profile and returns to the sign-in screen on this device.
@@ -139,6 +156,36 @@ export function SettingsScreen() {
     setLicense({ key: null, status: "inactive", plan: null, activatedAt: null, message: "Signed out on this device." });
     playSound("click");
     window.dispatchEvent(new Event("cra-pro:sign-out"));
+  }
+
+  async function handleClearAllData() {
+    const confirmed = window.confirm(
+      "Clear all local app data on this device? This removes saved reports, letters, dispute cases, profile, license, and USB validation cache."
+    );
+    if (!confirmed) return;
+
+    setClearingAll(true);
+    try {
+      await Promise.all([
+        resetLocalDatabase(),
+        clearProfile(),
+        resetOnboarding(),
+        deactivateLicense(),
+        forgetUsbValidation(),
+      ]);
+      setProfile(null);
+      setLicense({ key: null, status: "inactive", plan: null, activatedAt: null, message: "All local app data was cleared." });
+      await refreshClients();
+      setEditing(false);
+      playSound("success");
+      if (window.electronAPI?.reloadApp) {
+        await window.electronAPI.reloadApp();
+      } else {
+        window.location.reload();
+      }
+    } finally {
+      setClearingAll(false);
+    }
   }
 }
 

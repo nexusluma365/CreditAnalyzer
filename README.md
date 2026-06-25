@@ -98,7 +98,7 @@ Mac:
 npm run package:mac
 ```
 
-The macOS packaging command produces `release/Credit Report Analyzer Pro-0.1.0.dmg`. For customer distribution, configure a real app icon in the Electron Builder `buildResources` directory and provide Apple Developer ID signing/notarization credentials in the build environment. Without those external credentials, Electron Builder can create a DMG, but macOS will treat it as unsigned.
+The macOS packaging command produces `release/CreditAnalyzer.dmg`. The app is configured for hardened runtime, Developer ID distribution signing, and notarization. For customer distribution, provide Apple Developer signing/notarization credentials in the build environment; without those external credentials, Electron Builder can create a DMG for local testing, but macOS will treat it as unsigned/unnotarized.
 
 ## USB delivery structure
 

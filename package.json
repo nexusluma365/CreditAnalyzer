@@ -75,6 +75,12 @@
     "mac": {
       "category": "public.app-category.finance",
       "icon": "assets/icon.icns",
+      "type": "distribution",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.inherit.plist",
+      "notarize": true,
       "artifactName": "CreditAnalyzer.${ext}",
       "target": [
         "dmg"

@@ -36,6 +36,7 @@ type UsbPhase = "checking" | "unlocked" | "locked" | "skipped";
 
 const USB_POLL_MS = 5_000;
 const USB_HEARTBEAT_MS = 60_000;
+const USB_RECONNECT_MESSAGE = "Please Reconnect Key.";
 
 /**
  * Controls the first-launch experience and USB license gating:
@@ -67,7 +68,7 @@ function AppGate() {
     if (!scan.found || !scan.licenseRaw) {
       if (usbRequired) {
         setUsbPhase("locked");
-        setUsbReason("Your USB key was removed. Please reinsert it to continue.");
+        setUsbReason(USB_RECONNECT_MESSAGE);
       } else {
         setUsbPhase("skipped");
       }
@@ -122,9 +123,10 @@ function AppGate() {
 
     const interval = setInterval(async () => {
       const scan = await scanUsbLicense();
+      setUsbDrivesDetected(scan.drivesDetected ?? []);
       if (!scan.found || !scan.licenseRaw) {
         setUsbPhase("locked");
-        setUsbReason("Your USB key was removed. Please reinsert it to continue.");
+        setUsbReason(USB_RECONNECT_MESSAGE);
         return;
       }
       if (Date.now() - lastBackendCheck >= USB_HEARTBEAT_MS) {
@@ -132,7 +134,7 @@ function AppGate() {
         const result = await validateUsbLicense(scan.licenseRaw, scan.driveId);
         if (!result.valid) {
           setUsbPhase("locked");
-          setUsbReason(result.reason || "License validation failed.");
+          setUsbReason(result.reason || USB_RECONNECT_MESSAGE);
         }
       }
     }, USB_POLL_MS);

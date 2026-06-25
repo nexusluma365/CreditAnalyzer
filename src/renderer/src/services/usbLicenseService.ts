@@ -1,5 +1,5 @@
 import { apiPost } from "./apiClient";
-import { secureGetJson, secureSetJson } from "./secureStorageService";
+import { secureGetJson, secureRemove, secureSetJson } from "./secureStorageService";
 
 const USB_OFFLINE_GRACE_MS = 24 * 60 * 60 * 1000;
 const USB_CACHE_KEY = "cra-pro:usb-license-validation.v1";
@@ -84,6 +84,10 @@ export async function validateUsbLicense(
       maskedLicense: maskLicense(licenseRaw),
     };
   }
+}
+
+export async function forgetUsbValidation(): Promise<void> {
+  await secureRemove(USB_CACHE_KEY);
 }
 
 async function rememberUsbValidation(licenseRaw: string, driveId: string | null, maskedLicense: string) {

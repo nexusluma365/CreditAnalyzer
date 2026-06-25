@@ -31,14 +31,14 @@ export function UsbLockScreen({ reason, drivesDetected }: UsbLockScreenProps) {
               <LockIcon size={18} />
             </div>
             <div>
-              <h2 className="text-[15px] font-bold text-slate-700">USB Key Required</h2>
+              <h2 className="text-[15px] font-bold text-slate-700">Please Reconnect Key</h2>
             </div>
           </div>
 
           <p className="mt-3 text-[12.5px] leading-relaxed text-slate-500">
             {driveFound
               ? "A USB drive was detected but no license file was found on it. Make sure your Credit Analyzer USB key has a license file."
-              : "Please plug in your Credit Analyzer USB key to continue."}
+              : "The app is logged out until your Credit Analyzer USB key is connected again."}
           </p>
 
           {reason && (
@@ -55,7 +55,7 @@ export function UsbLockScreen({ reason, drivesDetected }: UsbLockScreenProps) {
         </div>
 
         <p className="mt-6 text-center text-[11px] text-slate-400">
-          Insert your USB key and the app will unlock automatically.
+          Reconnect your USB key and the app will unlock automatically.
         </p>
       </div>
     </div>

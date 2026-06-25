@@ -9,6 +9,31 @@ This build includes the deployment hardening pass requested:
 - Machine fingerprint is generated in Electron main process using device/system identifiers.
 - Client/profile/license/app data moved from browser localStorage to Electron encrypted secure storage.
 - Backend now has body-size limits, rate limiting, restricted CORS configuration, license middleware, and safer error handling.
+- macOS packaging is configured for hardened runtime, Developer ID distribution signing, and notarization through electron-builder.
+- USB removal during an active USB-licensed session locks/logs out the app with a "Please Reconnect Key" prompt and automatically unlocks after reinsertion.
+- Settings includes a confirmed Clear All action that removes local reports, letters, dispute cases, profile, license, onboarding, and USB validation cache.
+
+## macOS signing and notarization
+
+Apple trust requires a paid Apple Developer account and release credentials in the packaging environment. Build with one of these notarization credential sets:
+
+Recommended App Store Connect API key:
+
+APPLE_API_KEY=/absolute/path/AuthKey_XXXXXXXXXX.p8
+APPLE_API_KEY_ID=XXXXXXXXXX
+APPLE_API_ISSUER=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+CSC_LINK=/absolute/path/DeveloperIDApplication.p12
+CSC_KEY_PASSWORD=...
+
+Apple ID fallback:
+
+APPLE_ID=developer@example.com
+APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
+APPLE_TEAM_ID=TEAMID1234
+CSC_LINK=/absolute/path/DeveloperIDApplication.p12
+CSC_KEY_PASSWORD=...
+
+Without these external credentials, `npm run package:mac` can still create a DMG for local testing, but macOS Gatekeeper will treat it as unsigned/unnotarized.
 
 ## Railway environment variables
 
