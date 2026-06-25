@@ -1,7 +1,7 @@
 {
   "name": "credit-report-analyzer-pro",
   "productName": "Credit Report Analyzer Pro",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AI-assisted credit report analysis and dispute letter drafting — research-informed dispute strategy tool",
   "main": "dist-electron/main.js",
   "author": "Credit Report Analyzer Pro",
